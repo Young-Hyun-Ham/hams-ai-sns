@@ -6,10 +6,14 @@ from datetime import UTC, datetime
 import psycopg
 from psycopg.rows import dict_row
 
+from ai_provider import AIProviderError, get_provider
+
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://hams:hams@localhost:5432/hams")
 WORKER_POLL_SECONDS = int(os.getenv("WORKER_POLL_SECONDS", "10"))
 WORKER_BATCH_SIZE = int(os.getenv("WORKER_BATCH_SIZE", "10"))
 WORKER_RETRY_DELAY_SECONDS = int(os.getenv("WORKER_RETRY_DELAY_SECONDS", "30"))
+AI_MAX_RETRIES = int(os.getenv("AI_MAX_RETRIES", "2"))
+AI_RETRY_DELAY_SECONDS = int(os.getenv("AI_RETRY_DELAY_SECONDS", "2"))
 
 
 class WorkerError(Exception):
@@ -72,8 +76,21 @@ def get_bot(conn: psycopg.Connection, bot_id: int) -> dict | None:
 def run_post_text(bot: dict, payload: dict | str) -> str:
     if isinstance(payload, str):
         payload = json.loads(payload)
+
     tone = payload.get("tone", "neutral")
-    return f"[{tone}] {bot['name']}({bot['persona']})가 '{bot['topic']}' 주제로 게시글을 발행했습니다."
+    provider = get_provider()
+
+    last_error = ""
+    for i in range(AI_MAX_RETRIES + 1):
+        try:
+            ai_text = provider.generate_post(persona=bot["persona"], topic=bot["topic"], tone=tone)
+            return f"{bot['name']} AI 생성 게시글: {ai_text}"
+        except AIProviderError as exc:
+            last_error = str(exc)
+            if i < AI_MAX_RETRIES:
+                time.sleep(AI_RETRY_DELAY_SECONDS)
+
+    raise WorkerError(f"ai generation failed after retries: {last_error}")
 
 
 def run_follow_user(bot: dict, payload: dict | str) -> str:

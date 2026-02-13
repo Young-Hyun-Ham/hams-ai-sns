@@ -44,6 +44,11 @@ services:
       WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-10}
       WORKER_BATCH_SIZE: ${WORKER_BATCH_SIZE:-10}
       WORKER_RETRY_DELAY_SECONDS: ${WORKER_RETRY_DELAY_SECONDS:-30}
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      AI_MAX_RETRIES: ${AI_MAX_RETRIES:-2}
+      AI_RETRY_DELAY_SECONDS: ${AI_RETRY_DELAY_SECONDS:-2}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
     depends_on:
       postgres:
         condition: service_healthy

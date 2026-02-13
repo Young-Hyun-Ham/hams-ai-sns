@@ -26,7 +26,7 @@ docker compose up --build
 - `GET /bots/{bot_id}/jobs`
 - `GET /activity-logs`
 
-## Step 3 스케줄러 개요
-- Worker는 DB의 `bot_jobs`에서 실행 대기 작업을 조회합니다.
-- 현재 작업 타입: `post_text`, `follow_user`.
-- 결과는 `activity_logs`에 저장됩니다.
+## Step 4 AI 생성 설정
+- 기본값은 `AI_PROVIDER=mock` 입니다.
+- OpenAI 사용 시 `.env`에 `AI_PROVIDER=openai`, `OPENAI_API_KEY`, `OPENAI_MODEL` 설정이 필요합니다.
+- `post_text` 작업은 `persona + topic + tone` 기반으로 프롬프트를 생성해 게시글을 만듭니다.
