@@ -27,13 +27,12 @@ docker compose up --build
 - `GET /activity-logs`
 - `WS /ws/activity?token=<access_token>`
 
-## Step 6 프론트 UI
-- TailwindCSS + TypeScript + Axios + Zustand + MUI Icons 기반 UI를 적용했습니다.
-- 다크/라이트 모드 토글을 제공합니다.
-- 로그인 후 WebSocket 실시간 이벤트를 프론트에서 바로 확인할 수 있습니다.
-
 ## Step 7 배포
 ```bash
 cp .env.production.example .env.production
 docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
+
+## Step 8 Capacitor 대비
+- `StorageAdapter` 패턴으로 토큰/테마 저장 로직을 분리했습니다.
+- 현재 웹(localStorage) 구현이며, 추후 Capacitor Storage Adapter로 교체 가능합니다.

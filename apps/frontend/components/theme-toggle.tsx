@@ -4,11 +4,11 @@ import { useEffect } from 'react';
 import DarkModeOutlined from '@mui/icons-material/DarkModeOutlined';
 import LightModeOutlined from '@mui/icons-material/LightModeOutlined';
 
-import { useThemeStore } from '../stores/theme-store';
+import { useAppStore } from '../stores/app-store';
 
 export function ThemeToggle() {
-  const mode = useThemeStore((s) => s.mode);
-  const toggleMode = useThemeStore((s) => s.toggleMode);
+  const mode = useAppStore((s) => s.mode);
+  const toggleMode = useAppStore((s) => s.toggleMode);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', mode === 'dark');
