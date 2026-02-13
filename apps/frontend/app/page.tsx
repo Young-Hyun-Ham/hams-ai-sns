@@ -1,11 +1,18 @@
 'use client';
 
+import axios from 'axios';
 import { useMemo, useState } from 'react';
 
-type WsEvent = {
+import { ThemeToggle } from '../components/theme-toggle';
+
+type LoginResponse = {
+  access_token: string;
+  token_type: string;
+};
+
+type ActivityEvent = {
   type: string;
   data: {
-    id?: number;
     message?: string;
     executed_at?: string;
     user_id?: number;
@@ -15,18 +22,25 @@ type WsEvent = {
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 
 export default function HomePage() {
+  const [email, setEmail] = useState('owner@hams.local');
+  const [password, setPassword] = useState('hams1234');
   const [token, setToken] = useState('');
   const [status, setStatus] = useState('대기');
-  const [events, setEvents] = useState<WsEvent[]>([]);
+  const [events, setEvents] = useState<ActivityEvent[]>([]);
 
   const wsUrl = useMemo(() => {
     const base = API_BASE.replace('http://', 'ws://').replace('https://', 'wss://');
     return `${base}/ws/activity?token=${encodeURIComponent(token)}`;
   }, [token]);
 
-  const connect = () => {
+  const login = async () => {
+    const res = await axios.post<LoginResponse>(`${API_BASE}/auth/login`, { email, password });
+    setToken(res.data.access_token);
+  };
+
+  const connectWebSocket = () => {
     if (!token) {
-      alert('토큰을 입력하세요.');
+      alert('먼저 로그인하세요.');
       return;
     }
 
@@ -36,37 +50,39 @@ export default function HomePage() {
     ws.onopen = () => setStatus('연결됨');
     ws.onclose = () => setStatus('종료됨');
     ws.onerror = () => setStatus('에러');
-    ws.onmessage = (event) => {
-      const parsed: WsEvent = JSON.parse(event.data);
-      setEvents((prev) => [parsed, ...prev].slice(0, 20));
+    ws.onmessage = (evt) => {
+      const parsed: ActivityEvent = JSON.parse(evt.data);
+      setEvents((prev) => [parsed, ...prev].slice(0, 30));
     };
   };
 
   return (
-    <main style={{ minHeight: '100dvh', padding: 24 }}>
-      <h1>HAMS AI SNS - Step 5 WebSocket</h1>
-      <p>로그인 토큰을 입력하고 실시간 활동 로그를 구독하세요.</p>
+    <main className="mx-auto min-h-[100dvh] max-w-3xl bg-bg px-4 pb-[calc(env(safe-area-inset-bottom)+24px)] pt-[calc(env(safe-area-inset-top)+24px)]">
+      <header className="mb-4 flex items-center justify-between">
+        <h1 className="text-xl font-semibold">HAMS AI SNS - Step 6 UI</h1>
+        <ThemeToggle />
+      </header>
 
-      <div style={{ marginTop: 12, marginBottom: 12 }}>
-        <input
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          placeholder="Bearer 토큰 값"
-          style={{ width: '100%', maxWidth: 560, padding: 8 }}
-        />
-      </div>
+      <section className="rounded-xl border border-border bg-card p-4">
+        <p className="mb-3 text-sm text-fg/80">로그인 후 WebSocket 실시간 알림을 연결합니다.</p>
+        <div className="grid gap-2">
+          <input className="rounded-lg border border-border bg-transparent p-2" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <input className="rounded-lg border border-border bg-transparent p-2" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <div className="flex gap-2">
+            <button className="rounded-lg bg-primary px-3 py-2 text-white" onClick={login}>로그인</button>
+            <button className="rounded-lg border border-border px-3 py-2" onClick={connectWebSocket}>실시간 연결</button>
+          </div>
+        </div>
+        <p className="mt-2 break-all text-xs">token: {token || '없음'}</p>
+        <p className="mt-1 text-sm">상태: {status}</p>
+      </section>
 
-      <button onClick={connect} style={{ padding: '8px 14px' }}>
-        WebSocket 연결
-      </button>
-      <p>상태: {status}</p>
-
-      <section style={{ marginTop: 16 }}>
-        <h2>실시간 이벤트</h2>
-        <ul>
-          {events.map((item, idx) => (
-            <li key={`${item.type}-${idx}`}>
-              [{item.type}] {item.data.executed_at ?? ''} {item.data.message ?? `user_id=${item.data.user_id}`}
+      <section className="mt-4 rounded-xl border border-border bg-card p-4">
+        <h2 className="mb-2 font-medium">실시간 이벤트</h2>
+        <ul className="space-y-2 text-sm">
+          {events.map((evt, idx) => (
+            <li key={`${evt.type}-${idx}`} className="rounded-md border border-border p-2">
+              [{evt.type}] {evt.data.executed_at ?? ''} {evt.data.message ?? `user_id=${evt.data.user_id}`}
             </li>
           ))}
         </ul>

@@ -27,11 +27,7 @@ docker compose up --build
 - `GET /activity-logs`
 - `WS /ws/activity?token=<access_token>`
 
-## Step 4 AI 생성 설정
-- 기본값은 `AI_PROVIDER=mock` 입니다.
-- OpenAI 사용 시 `.env`에 `AI_PROVIDER=openai`, `OPENAI_API_KEY`, `OPENAI_MODEL` 설정이 필요합니다.
-- `post_text` 작업은 `persona + topic + tone` 기반으로 프롬프트를 생성해 게시글을 만듭니다.
-
-## Step 5 실시간 알림
-- Worker가 기록한 `activity_logs`를 API가 WebSocket으로 브로드캐스트합니다.
-- 프론트 첫 화면에서 토큰 입력 후 실시간 이벤트를 확인할 수 있습니다.
+## Step 6 프론트 UI
+- TailwindCSS + TypeScript + Axios + Zustand + MUI Icons 기반 UI를 적용했습니다.
+- 다크/라이트 모드 토글을 제공합니다.
+- 로그인 후 WebSocket 실시간 이벤트를 프론트에서 바로 확인할 수 있습니다.
