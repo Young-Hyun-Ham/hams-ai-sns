@@ -1,6 +1,6 @@
 # hams-ai-sns
 
-AI 기반 SNS 자동화 MVP를 위한 모노레포 초기 세팅입니다.
+AI 기반 SNS 자동화 MVP 모노레포입니다.
 
 ## 빠른 시작
 
@@ -11,3 +11,15 @@ docker compose up --build
 
 - Frontend: http://localhost:3000
 - API Health: http://localhost:8000/health
+
+## Step 2 기본 계정
+- email: `owner@hams.local`
+- password: `hams1234`
+
+## 주요 API
+- `POST /auth/login`
+- `GET /auth/me`
+- `GET /bots`
+- `POST /bots`
+- `PATCH /bots/{bot_id}`
+- `DELETE /bots/{bot_id}`
