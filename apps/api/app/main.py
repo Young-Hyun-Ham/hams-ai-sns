@@ -1,8 +1,11 @@
-from fastapi import Depends, FastAPI, HTTPException, Query, Response
+import asyncio
+
+from fastapi import Depends, FastAPI, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
 import psycopg
 
 from app.db import get_connection, get_db, init_db
 from app.deps import get_current_user
+from app.realtime import activity_log_poller, manager
 from app.schemas import (
     ActivityLogResponse,
     BotCreateRequest,
@@ -13,16 +16,30 @@ from app.schemas import (
     LoginResponse,
     MeResponse,
 )
+from app.security import decode_access_token
 from app.services import auth_service, bot_service
 
-app = FastAPI(title="hams-api", version="0.3.0")
+app = FastAPI(title="hams-api", version="0.4.0")
 
 
 @app.on_event("startup")
-def on_startup() -> None:
+async def on_startup() -> None:
     init_db()
     with get_connection() as conn:
         auth_service.ensure_default_user(conn)
+
+    app.state.stop_event = asyncio.Event()
+    app.state.poller_task = asyncio.create_task(activity_log_poller(app.state.stop_event))
+
+
+@app.on_event("shutdown")
+async def on_shutdown() -> None:
+    app.state.stop_event.set()
+    app.state.poller_task.cancel()
+    try:
+        await app.state.poller_task
+    except asyncio.CancelledError:
+        pass
 
 
 @app.get("/health")
@@ -106,3 +123,33 @@ def get_activity_logs(
 ) -> list[ActivityLogResponse]:
     rows = bot_service.list_activity_logs(conn, current_user["id"], limit=limit)
     return [ActivityLogResponse(**row) for row in rows]
+
+
+@app.websocket("/ws/activity")
+async def ws_activity(websocket: WebSocket) -> None:
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=1008, reason="token is required")
+        return
+
+    try:
+        payload = decode_access_token(token)
+    except ValueError:
+        await websocket.close(code=1008, reason="invalid token")
+        return
+
+    user_id = int(payload["sub"])
+    with get_connection() as conn:
+        user = auth_service.get_user_by_id(conn, user_id)
+    if not user:
+        await websocket.close(code=1008, reason="user not found")
+        return
+
+    await manager.connect(user_id, websocket)
+    await websocket.send_json({"type": "connected", "data": {"user_id": user_id}})
+
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        await manager.disconnect(user_id, websocket)
