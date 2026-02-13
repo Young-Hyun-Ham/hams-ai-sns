@@ -48,4 +48,41 @@ def init_db() -> None:
                 );
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS bot_jobs (
+                    id BIGSERIAL PRIMARY KEY,
+                    bot_id BIGINT NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+                    job_type VARCHAR(50) NOT NULL,
+                    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    interval_seconds INT NOT NULL DEFAULT 300,
+                    next_run_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    status VARCHAR(20) NOT NULL DEFAULT 'active',
+                    retry_count INT NOT NULL DEFAULT 0,
+                    max_retries INT NOT NULL DEFAULT 3,
+                    last_error TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                """
+            )
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_bot_jobs_scheduler
+                ON bot_jobs (status, next_run_at);
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS activity_logs (
+                    id BIGSERIAL PRIMARY KEY,
+                    bot_id BIGINT NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+                    job_id BIGINT NOT NULL REFERENCES bot_jobs(id) ON DELETE CASCADE,
+                    job_type VARCHAR(50) NOT NULL,
+                    result_status VARCHAR(20) NOT NULL,
+                    message TEXT NOT NULL,
+                    executed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                """
+            )
         conn.commit()

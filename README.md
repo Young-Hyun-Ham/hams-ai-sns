@@ -23,3 +23,10 @@ docker compose up --build
 - `POST /bots`
 - `PATCH /bots/{bot_id}`
 - `DELETE /bots/{bot_id}`
+- `GET /bots/{bot_id}/jobs`
+- `GET /activity-logs`
+
+## Step 3 스케줄러 개요
+- Worker는 DB의 `bot_jobs`에서 실행 대기 작업을 조회합니다.
+- 현재 작업 타입: `post_text`, `follow_user`.
+- 결과는 `activity_logs`에 저장됩니다.

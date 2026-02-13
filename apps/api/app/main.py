@@ -1,10 +1,12 @@
-from fastapi import Depends, FastAPI, HTTPException, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Response
 import psycopg
 
-from app.db import DATABASE_URL, get_connection, get_db, init_db
+from app.db import get_connection, get_db, init_db
 from app.deps import get_current_user
 from app.schemas import (
+    ActivityLogResponse,
     BotCreateRequest,
+    BotJobResponse,
     BotResponse,
     BotUpdateRequest,
     LoginRequest,
@@ -13,14 +15,12 @@ from app.schemas import (
 )
 from app.services import auth_service, bot_service
 
-app = FastAPI(title="hams-api", version="0.2.0")
+app = FastAPI(title="hams-api", version="0.3.0")
 
 
 @app.on_event("startup")
 def on_startup() -> None:
     init_db()
-    with psycopg.connect(DATABASE_URL):
-        pass
     with get_connection() as conn:
         auth_service.ensure_default_user(conn)
 
@@ -86,3 +86,23 @@ def remove_bot(
     if not deleted:
         raise HTTPException(status_code=404, detail="봇을 찾을 수 없습니다.")
     return Response(status_code=204)
+
+
+@app.get("/bots/{bot_id}/jobs", response_model=list[BotJobResponse])
+def get_bot_jobs(
+    bot_id: int,
+    current_user: dict = Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_db),
+) -> list[BotJobResponse]:
+    rows = bot_service.list_bot_jobs(conn, bot_id, current_user["id"])
+    return [BotJobResponse(**row) for row in rows]
+
+
+@app.get("/activity-logs", response_model=list[ActivityLogResponse])
+def get_activity_logs(
+    limit: int = Query(default=30, ge=1, le=100),
+    current_user: dict = Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_db),
+) -> list[ActivityLogResponse]:
+    rows = bot_service.list_activity_logs(conn, current_user["id"], limit=limit)
+    return [ActivityLogResponse(**row) for row in rows]

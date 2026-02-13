@@ -1,4 +1,8 @@
+import json
+
 import psycopg
+
+DEFAULT_JOB_INTERVAL_SECONDS = 300
 
 
 def list_bots(conn: psycopg.Connection, user_id: int) -> list[dict]:
@@ -26,6 +30,19 @@ def create_bot(conn: psycopg.Connection, user_id: int, name: str, persona: str, 
             (user_id, name, persona, topic),
         )
         bot = cur.fetchone()
+
+        seed_jobs = [
+            (bot["id"], "post_text", json.dumps({"tone": "friendly"}), DEFAULT_JOB_INTERVAL_SECONDS),
+            (bot["id"], "follow_user", json.dumps({"target": "ai_founder"}), DEFAULT_JOB_INTERVAL_SECONDS),
+        ]
+        cur.executemany(
+            """
+            INSERT INTO bot_jobs (bot_id, job_type, payload, interval_seconds)
+            VALUES (%s, %s, %s::jsonb, %s)
+            """,
+            seed_jobs,
+        )
+
     conn.commit()
     return bot
 
@@ -81,3 +98,35 @@ def get_bot(conn: psycopg.Connection, bot_id: int, user_id: int) -> dict | None:
             (bot_id, user_id),
         )
         return cur.fetchone()
+
+
+def list_bot_jobs(conn: psycopg.Connection, bot_id: int, user_id: int) -> list[dict]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT j.id, j.bot_id, j.job_type, j.payload, j.interval_seconds,
+                   j.next_run_at, j.status, j.retry_count, j.max_retries, j.last_error
+            FROM bot_jobs j
+            INNER JOIN bots b ON b.id = j.bot_id
+            WHERE j.bot_id = %s AND b.user_id = %s
+            ORDER BY j.id DESC
+            """,
+            (bot_id, user_id),
+        )
+        return list(cur.fetchall())
+
+
+def list_activity_logs(conn: psycopg.Connection, user_id: int, limit: int = 30) -> list[dict]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT l.id, l.bot_id, l.job_id, l.job_type, l.result_status, l.message, l.executed_at
+            FROM activity_logs l
+            INNER JOIN bots b ON b.id = l.bot_id
+            WHERE b.user_id = %s
+            ORDER BY l.id DESC
+            LIMIT %s
+            """,
+            (user_id, limit),
+        )
+        return list(cur.fetchall())

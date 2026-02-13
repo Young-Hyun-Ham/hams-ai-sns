@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -37,3 +39,26 @@ class BotResponse(BaseModel):
     persona: str
     topic: str
     is_active: bool
+
+
+class BotJobResponse(BaseModel):
+    id: int
+    bot_id: int
+    job_type: str
+    payload: dict
+    interval_seconds: int
+    next_run_at: datetime
+    status: str
+    retry_count: int
+    max_retries: int
+    last_error: str | None
+
+
+class ActivityLogResponse(BaseModel):
+    id: int
+    bot_id: int
+    job_id: int
+    job_type: str
+    result_status: str
+    message: str
+    executed_at: datetime

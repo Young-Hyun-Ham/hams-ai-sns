@@ -42,9 +42,13 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-hams}:${POSTGRES_PASSWORD:-hams}@postgres:5432/${POSTGRES_DB:-hams}
       WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-10}
+      WORKER_BATCH_SIZE: ${WORKER_BATCH_SIZE:-10}
+      WORKER_RETRY_DELAY_SECONDS: ${WORKER_RETRY_DELAY_SECONDS:-30}
     depends_on:
       postgres:
         condition: service_healthy
+      api:
+        condition: service_started
 
   frontend:
     build:
