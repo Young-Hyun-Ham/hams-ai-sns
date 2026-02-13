@@ -11,6 +11,8 @@ __pycache__/
 # Env
 .env
 .env.*
+!.env.example
+!.env.production.example
 
 # Logs
 *.log
