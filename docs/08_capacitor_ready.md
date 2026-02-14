@@ -43,3 +43,11 @@ docker compose up --build
 - 현재는 웹 기준(localStorage) 구현이며, Capacitor 적용 시 `StorageAdapter`만 교체하면 된다.
 - 예: Capacitor Preferences 플러그인 어댑터 구현 후 `getStorageAdapter()`에서 분기.
 - 모바일 네이티브 키보드/뷰포트 이슈는 Step 8 이후 실제 디바이스 검증이 필요하다.
+
+### 빌드 트러블슈팅 (Windows 포함)
+- 에러: `'next'은(는) 내부 또는 외부 명령...`
+- 원인: `node_modules`가 없거나 로컬 `next` 바이너리를 찾지 못한 상태.
+- 대응:
+  1) `npm install`
+  2) `npm run build`
+- 참고: 현재 `build` 스크립트는 로컬 `next`가 없으면 `npx next@14.2.5 build` fallback을 시도한다.
