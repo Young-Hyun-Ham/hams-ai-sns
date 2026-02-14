@@ -46,3 +46,9 @@ npm install
 npm run build
 ```
 - 현재 `npm run build`는 로컬 `next` 바이너리가 없을 경우 `npx next@14.2.5 build`를 자동 시도합니다.
+
+- `@mui/icons-material`를 사용하는 경우 peer 의존성 설치가 필요합니다.
+```bash
+cd apps/frontend
+npm install @emotion/react @emotion/styled
+```

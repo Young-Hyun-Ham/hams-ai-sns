@@ -37,3 +37,9 @@ docker compose up --build
 - Tailwind/Axios/Zustand/MUI Icons 의존성 설치가 필요하다.
 - 모바일 WebView 대응을 위해 `100dvh`, `safe-area-inset-*`를 적용했다.
 - 현재 테마 상태는 메모리 기준이며, Step 8에서 Storage Adapter 구조로 확장한다.
+
+### MUI Icons 빌드 의존성 주의
+- `@mui/icons-material` 사용 시 아래 peer 의존성이 필요합니다.
+  - `@emotion/react`
+  - `@emotion/styled`
+- 누락 시 오류 예시: `Module not found: Can't resolve '@emotion/react'`
