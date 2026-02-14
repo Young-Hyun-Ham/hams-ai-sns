@@ -1,0 +1,82 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hams_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hams}
+      POSTGRES_USER: ${POSTGRES_USER:-hams}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hams}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hams}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: ./apps/api
+    container_name: hams_api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-hams}:${POSTGRES_PASSWORD:-hams}@postgres:5432/${POSTGRES_DB:-hams}
+      APP_ENV: ${APP_ENV:-production}
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ./apps/worker
+    container_name: hams_worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-hams}:${POSTGRES_PASSWORD:-hams}@postgres:5432/${POSTGRES_DB:-hams}
+      WORKER_POLL_SECONDS: ${WORKER_POLL_SECONDS:-10}
+      WORKER_BATCH_SIZE: ${WORKER_BATCH_SIZE:-10}
+      WORKER_RETRY_DELAY_SECONDS: ${WORKER_RETRY_DELAY_SECONDS:-30}
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      AI_MAX_RETRIES: ${AI_MAX_RETRIES:-2}
+      AI_RETRY_DELAY_SECONDS: ${AI_RETRY_DELAY_SECONDS:-2}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./apps/frontend
+    container_name: hams_frontend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
