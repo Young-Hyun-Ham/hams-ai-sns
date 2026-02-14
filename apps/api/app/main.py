@@ -1,0 +1,155 @@
+import asyncio
+
+from fastapi import Depends, FastAPI, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
+import psycopg
+
+from app.db import get_connection, get_db, init_db
+from app.deps import get_current_user
+from app.realtime import activity_log_poller, manager
+from app.schemas import (
+    ActivityLogResponse,
+    BotCreateRequest,
+    BotJobResponse,
+    BotResponse,
+    BotUpdateRequest,
+    LoginRequest,
+    LoginResponse,
+    MeResponse,
+)
+from app.security import decode_access_token
+from app.services import auth_service, bot_service
+
+app = FastAPI(title="hams-api", version="0.4.0")
+
+
+@app.on_event("startup")
+async def on_startup() -> None:
+    init_db()
+    with get_connection() as conn:
+        auth_service.ensure_default_user(conn)
+
+    app.state.stop_event = asyncio.Event()
+    app.state.poller_task = asyncio.create_task(activity_log_poller(app.state.stop_event))
+
+
+@app.on_event("shutdown")
+async def on_shutdown() -> None:
+    app.state.stop_event.set()
+    app.state.poller_task.cancel()
+    try:
+        await app.state.poller_task
+    except asyncio.CancelledError:
+        pass
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok", "service": "api"}
+
+
+@app.post("/auth/login", response_model=LoginResponse)
+def login(payload: LoginRequest, conn: psycopg.Connection = Depends(get_db)) -> LoginResponse:
+    try:
+        access_token = auth_service.login(conn, payload.email, payload.password)
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    return LoginResponse(access_token=access_token)
+
+
+@app.get("/auth/me", response_model=MeResponse)
+def me(current_user: dict = Depends(get_current_user)) -> MeResponse:
+    return MeResponse(**current_user)
+
+
+@app.get("/bots", response_model=list[BotResponse])
+def get_bots(
+    current_user: dict = Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_db),
+) -> list[BotResponse]:
+    rows = bot_service.list_bots(conn, current_user["id"])
+    return [BotResponse(**row) for row in rows]
+
+
+@app.post("/bots", response_model=BotResponse, status_code=201)
+def create_bot(
+    payload: BotCreateRequest,
+    current_user: dict = Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_db),
+) -> BotResponse:
+    row = bot_service.create_bot(conn, current_user["id"], payload.name, payload.persona, payload.topic)
+    return BotResponse(**row)
+
+
+@app.patch("/bots/{bot_id}", response_model=BotResponse)
+def patch_bot(
+    bot_id: int,
+    payload: BotUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_db),
+) -> BotResponse:
+    row = bot_service.update_bot(conn, bot_id, current_user["id"], payload.model_dump())
+    if not row:
+        raise HTTPException(status_code=404, detail="봇을 찾을 수 없습니다.")
+    return BotResponse(**row)
+
+
+@app.delete("/bots/{bot_id}", status_code=204)
+def remove_bot(
+    bot_id: int,
+    current_user: dict = Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_db),
+) -> Response:
+    deleted = bot_service.delete_bot(conn, bot_id, current_user["id"])
+    if not deleted:
+        raise HTTPException(status_code=404, detail="봇을 찾을 수 없습니다.")
+    return Response(status_code=204)
+
+
+@app.get("/bots/{bot_id}/jobs", response_model=list[BotJobResponse])
+def get_bot_jobs(
+    bot_id: int,
+    current_user: dict = Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_db),
+) -> list[BotJobResponse]:
+    rows = bot_service.list_bot_jobs(conn, bot_id, current_user["id"])
+    return [BotJobResponse(**row) for row in rows]
+
+
+@app.get("/activity-logs", response_model=list[ActivityLogResponse])
+def get_activity_logs(
+    limit: int = Query(default=30, ge=1, le=100),
+    current_user: dict = Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_db),
+) -> list[ActivityLogResponse]:
+    rows = bot_service.list_activity_logs(conn, current_user["id"], limit=limit)
+    return [ActivityLogResponse(**row) for row in rows]
+
+
+@app.websocket("/ws/activity")
+async def ws_activity(websocket: WebSocket) -> None:
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=1008, reason="token is required")
+        return
+
+    try:
+        payload = decode_access_token(token)
+    except ValueError:
+        await websocket.close(code=1008, reason="invalid token")
+        return
+
+    user_id = int(payload["sub"])
+    with get_connection() as conn:
+        user = auth_service.get_user_by_id(conn, user_id)
+    if not user:
+        await websocket.close(code=1008, reason="user not found")
+        return
+
+    await manager.connect(user_id, websocket)
+    await websocket.send_json({"type": "connected", "data": {"user_id": user_id}})
+
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        await manager.disconnect(user_id, websocket)

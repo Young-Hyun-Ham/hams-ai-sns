@@ -1,0 +1,27 @@
+version: '3.9'
+
+services:
+  postgres:
+    env_file:
+      - .env.production
+    ports: []
+
+  api:
+    env_file:
+      - .env.production
+    environment:
+      APP_ENV: production
+    ports:
+      - "8000:8000"
+
+  worker:
+    env_file:
+      - .env.production
+
+  frontend:
+    env_file:
+      - .env.production
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-https://api.example.com}
+    ports:
+      - "3000:3000"
