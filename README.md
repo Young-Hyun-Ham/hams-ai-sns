@@ -27,28 +27,15 @@ docker compose up --build
 - `GET /activity-logs`
 - `WS /ws/activity?token=<access_token>`
 
-## Step 7 배포
-```bash
-cp .env.production.example .env.production
-docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.production up -d --build
-```
-
-## Step 8 Capacitor 대비
-- `StorageAdapter` 패턴으로 토큰/테마 저장 로직을 분리했습니다.
-- 현재 웹(localStorage) 구현이며, 추후 Capacitor Storage Adapter로 교체 가능합니다.
-
-## 프론트 빌드 오류 대응
-- 에러: `'next'은(는) 내부 또는 외부 명령...`
-- 조치:
+## 프론트 빌드/실행 문제 해결
 ```bash
 cd apps/frontend
+npm run clean
 npm install
+npm run dev
+# 배포 빌드
 npm run build
 ```
-- 현재 `npm run build`는 로컬 `next` 바이너리가 없을 경우 `npx next@14.2.5 build`를 자동 시도합니다.
 
-- `@mui/icons-material`를 사용하는 경우 peer 의존성 설치가 필요합니다.
-```bash
-cd apps/frontend
-npm install @emotion/react @emotion/styled
-```
+- `@mui/icons-material` 사용 시 반드시 `@emotion/react`, `@emotion/styled`가 필요합니다.
+- 루트가 아닌 `apps/frontend` 경로에서 npm 명령을 실행해야 합니다.

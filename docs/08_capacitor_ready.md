@@ -51,3 +51,7 @@ docker compose up --build
   1) `npm install`
   2) `npm run build`
 - 참고: 현재 `build` 스크립트는 로컬 `next`가 없으면 `npx next@14.2.5 build` fallback을 시도한다.
+
+### 프론트 화면 범위(보완)
+- 로그인/실시간 구독 뿐 아니라 봇 등록/목록조회/활성화/삭제 화면을 포함한다.
+- Step 8 기준으로 SNS 운영 최소 화면(MVP CRUD + 이벤트 모니터링)을 제공한다.
