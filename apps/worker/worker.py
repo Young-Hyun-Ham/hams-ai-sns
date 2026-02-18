@@ -56,8 +56,10 @@ def execute_job(conn: psycopg.Connection, job: dict) -> None:
     if not bot:
         raise WorkerError(f"bot({job['bot_id']}) not found")
 
-    if job["job_type"] == "post_text":
-        message = run_post_text(bot, job["payload"])
+    if job["job_type"] == "ai_create_post":
+        message = run_ai_create_post(conn, bot, job["payload"])
+    elif job["job_type"] == "ai_create_comment":
+        message = run_ai_create_comment(conn, bot, job["payload"])
     elif job["job_type"] == "follow_user":
         message = run_follow_user(bot, job["payload"])
     else:
@@ -69,28 +71,143 @@ def execute_job(conn: psycopg.Connection, job: dict) -> None:
 
 def get_bot(conn: psycopg.Connection, bot_id: int) -> dict | None:
     with conn.cursor() as cur:
-        cur.execute("SELECT id, name, persona, topic FROM bots WHERE id = %s", (bot_id,))
+        cur.execute("SELECT id, user_id, name, persona, topic FROM bots WHERE id = %s", (bot_id,))
         return cur.fetchone()
 
 
-def run_post_text(bot: dict, payload: dict | str) -> str:
+
+
+def _recent_posts_by_bot(conn: psycopg.Connection, bot_id: int, limit: int = 5) -> list[str]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT content
+            FROM sns_posts
+            WHERE bot_id = %s
+            ORDER BY id DESC
+            LIMIT %s
+            """,
+            (bot_id, limit),
+        )
+        return [row["content"] for row in cur.fetchall()]
+
+
+def _recent_comments_by_user(conn: psycopg.Connection, user_id: int, limit: int = 5) -> list[str]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT content
+            FROM sns_comments
+            WHERE user_id = %s
+            ORDER BY id DESC
+            LIMIT %s
+            """,
+            (user_id, limit),
+        )
+        return [row["content"] for row in cur.fetchall()]
+
+def _generate_with_retry(generate_fn) -> str:
+    last_error = ""
+    for i in range(AI_MAX_RETRIES + 1):
+        try:
+            return generate_fn()
+        except AIProviderError as exc:
+            last_error = str(exc)
+            if i < AI_MAX_RETRIES:
+                time.sleep(AI_RETRY_DELAY_SECONDS)
+    raise WorkerError(f"ai generation failed after retries: {last_error}")
+
+
+def run_ai_create_post(conn: psycopg.Connection, bot: dict, payload: dict | str) -> str:
     if isinstance(payload, str):
         payload = json.loads(payload)
 
     tone = payload.get("tone", "neutral")
     provider = get_provider()
+    recent_posts = _recent_posts_by_bot(conn, bot["id"], limit=5)
+    ai_text = _generate_with_retry(
+        lambda: provider.generate_post(
+            persona=bot["persona"],
+            topic=bot["topic"],
+            tone=tone,
+            recent_posts=recent_posts,
+        )
+    )
 
-    last_error = ""
-    for i in range(AI_MAX_RETRIES + 1):
-        try:
-            ai_text = provider.generate_post(persona=bot["persona"], topic=bot["topic"], tone=tone)
-            return f"{bot['name']} AI 생성 게시글: {ai_text}"
-        except AIProviderError as exc:
-            last_error = str(exc)
-            if i < AI_MAX_RETRIES:
-                time.sleep(AI_RETRY_DELAY_SECONDS)
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO sns_posts (user_id, bot_id, title, content, is_anonymous)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (bot["user_id"], bot["id"], f"{bot['name']}의 자동 글", ai_text, True),
+        )
+        post = cur.fetchone()
 
-    raise WorkerError(f"ai generation failed after retries: {last_error}")
+    return f"{bot['name']} 봇이 게시글 #{post['id']} 생성: {ai_text}"
+
+
+def _pick_latest_post_without_comment(conn: psycopg.Connection, user_id: int, bot_id: int) -> dict | None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT p.id, p.title, p.content
+            FROM sns_posts p
+            WHERE p.user_id = %s
+              AND (p.bot_id IS NULL OR p.bot_id <> %s)
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM sns_comments c
+                  WHERE c.post_id = p.id
+                    AND c.user_id = %s
+              )
+            ORDER BY p.created_at DESC
+            LIMIT 1
+            """,
+            (user_id, bot_id, user_id),
+        )
+        return cur.fetchone()
+
+
+def run_ai_create_comment(conn: psycopg.Connection, bot: dict, payload: dict | str) -> str:
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+
+    target_post = _pick_latest_post_without_comment(conn, bot["user_id"], bot["id"])
+    if not target_post:
+        return f"{bot['name']} 봇 댓글 대상 게시글이 없어 건너뜀"
+
+    tone = payload.get("tone", "supportive")
+    fallback = payload.get("fallback", "좋은 글 감사합니다.")
+    provider = get_provider()
+    recent_comments = _recent_comments_by_user(conn, bot["user_id"], limit=5)
+
+    try:
+        comment = _generate_with_retry(
+            lambda: provider.generate_comment(
+                persona=bot["persona"],
+                post_title=target_post["title"],
+                post_content=target_post["content"],
+                tone=tone,
+                recent_comments=recent_comments,
+            )
+        )
+    except WorkerError:
+        comment = fallback
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO sns_comments (post_id, user_id, content)
+            VALUES (%s, %s, %s)
+            RETURNING id
+            """,
+            (target_post["id"], bot["user_id"], comment),
+        )
+        row = cur.fetchone()
+
+    return f"{bot['name']} 봇이 게시글 #{target_post['id']}에 댓글 #{row['id']} 등록"
 
 
 def run_follow_user(bot: dict, payload: dict | str) -> str:
