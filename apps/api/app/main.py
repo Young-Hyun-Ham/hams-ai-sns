@@ -10,6 +10,8 @@ from app.deps import get_current_user
 from app.realtime import activity_log_poller, manager
 from app.schemas import (
     ActivityLogResponse,
+    AIModelListRequest,
+    AIModelListResponse,
     BotCreateRequest,
     BotJobResponse,
     BotResponse,
@@ -25,7 +27,7 @@ from app.schemas import (
     SnsPostUpdateRequest,
 )
 from app.security import decode_access_token
-from app.services import auth_service, bot_service, sns_service
+from app.services import ai_model_service, auth_service, bot_service, sns_service
 
 app = FastAPI(title="hams-api", version="0.7.0")
 
@@ -93,13 +95,41 @@ def get_bots(
     return [BotResponse(**row) for row in rows]
 
 
+@app.post("/ai/models", response_model=AIModelListResponse)
+def get_ai_models(
+    payload: AIModelListRequest,
+    current_user: dict = Depends(get_current_user),
+) -> AIModelListResponse:
+    _ = current_user
+    try:
+        models = ai_model_service.list_models(payload.ai_provider, payload.api_key)
+    except ai_model_service.AIModelServiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not models:
+        raise HTTPException(status_code=400, detail="조회 가능한 모델이 없습니다.")
+    return AIModelListResponse(models=models)
+
+
 @app.post("/bots", response_model=BotResponse, status_code=201)
 def create_bot(
     payload: BotCreateRequest,
     current_user: dict = Depends(get_current_user),
     conn: psycopg.Connection = Depends(get_db),
 ) -> BotResponse:
-    row = bot_service.create_bot(conn, current_user["id"], payload.name, payload.persona, payload.topic)
+    try:
+        row = bot_service.create_bot(
+            conn,
+            current_user["id"],
+            payload.name,
+            payload.persona,
+            payload.topic,
+            payload.ai_provider,
+            payload.api_key,
+            payload.ai_model,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return BotResponse(**row)
 
 
@@ -110,7 +140,10 @@ def patch_bot(
     current_user: dict = Depends(get_current_user),
     conn: psycopg.Connection = Depends(get_db),
 ) -> BotResponse:
-    row = bot_service.update_bot(conn, bot_id, current_user["id"], payload.model_dump())
+    try:
+        row = bot_service.update_bot(conn, bot_id, current_user["id"], payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not row:
         raise HTTPException(status_code=404, detail="봇을 찾을 수 없습니다.")
     return BotResponse(**row)
@@ -182,6 +215,7 @@ def create_sns_post(
         row = sns_service.create_post(
             conn,
             current_user["id"],
+            payload.category,
             payload.title,
             payload.content,
             payload.is_anonymous,
@@ -246,6 +280,7 @@ def get_sns_comments(
     rows = sns_service.list_comments(conn, post_id)
     for row in rows:
         row["can_edit"] = row["user_id"] == current_user["id"]
+        row["bot_name"] = row.get("bot_name")
     return [SnsCommentResponse(**row) for row in rows]
 
 
@@ -257,10 +292,16 @@ def create_sns_comment(
     conn: psycopg.Connection = Depends(get_db),
 ) -> SnsCommentResponse:
     try:
-        row = sns_service.create_comment(conn, post_id, current_user["id"], payload.content)
+        row = sns_service.create_comment(conn, post_id, current_user["id"], payload.content, payload.bot_id)
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        detail = str(exc)
+        status_code = 400 if detail == "유효하지 않은 봇입니다." else 404
+        raise HTTPException(status_code=status_code, detail=detail) from exc
     row["can_edit"] = True
+    row["bot_name"] = None
+    if row["bot_id"]:
+        bot = bot_service.get_bot(conn, row["bot_id"], current_user["id"])
+        row["bot_name"] = bot["name"] if bot else None
     return SnsCommentResponse(**row)
 
 
@@ -275,6 +316,10 @@ def patch_sns_comment(
     if not row:
         raise HTTPException(status_code=403, detail="본인이 작성한 댓글만 수정할 수 있습니다.")
     row["can_edit"] = True
+    row["bot_name"] = None
+    if row["bot_id"]:
+        bot = bot_service.get_bot(conn, row["bot_id"], current_user["id"])
+        row["bot_name"] = bot["name"] if bot else None
     return SnsCommentResponse(**row)
 
 

@@ -5,11 +5,33 @@ import psycopg
 DEFAULT_JOB_INTERVAL_SECONDS = 300
 
 
+def _validate_ai_config(ai_provider: str, api_key: str, ai_model: str) -> None:
+    provider = (ai_provider or "").strip().lower()
+    if provider not in {"mock", "gpt", "gemini", "claude"}:
+        raise ValueError("지원하지 않는 AI 종류입니다.")
+
+    if provider == "mock":
+        return
+
+    if not api_key.strip():
+        raise ValueError("API Key를 입력해주세요.")
+    if not ai_model.strip():
+        raise ValueError("모델을 선택해주세요.")
+
+
 def list_bots(conn: psycopg.Connection, user_id: int) -> list[dict]:
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT id, user_id, name, persona, topic, is_active
+            SELECT id,
+                   user_id,
+                   name,
+                   persona,
+                   topic,
+                   ai_provider,
+                   ai_model,
+                   (api_key IS NOT NULL AND api_key <> '') AS has_api_key,
+                   is_active
             FROM bots
             WHERE user_id = %s
             ORDER BY id DESC
@@ -19,15 +41,34 @@ def list_bots(conn: psycopg.Connection, user_id: int) -> list[dict]:
         return list(cur.fetchall())
 
 
-def create_bot(conn: psycopg.Connection, user_id: int, name: str, persona: str, topic: str) -> dict:
+def create_bot(
+    conn: psycopg.Connection,
+    user_id: int,
+    name: str,
+    persona: str,
+    topic: str,
+    ai_provider: str,
+    api_key: str,
+    ai_model: str,
+) -> dict:
+    _validate_ai_config(ai_provider, api_key, ai_model)
+
     with conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO bots (user_id, name, persona, topic)
-            VALUES (%s, %s, %s, %s)
-            RETURNING id, user_id, name, persona, topic, is_active
+            INSERT INTO bots (user_id, name, persona, topic, ai_provider, api_key, ai_model)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING id,
+                      user_id,
+                      name,
+                      persona,
+                      topic,
+                      ai_provider,
+                      ai_model,
+                      (api_key IS NOT NULL AND api_key <> '') AS has_api_key,
+                      is_active
             """,
-            (user_id, name, persona, topic),
+            (user_id, name, persona, topic, ai_provider, api_key.strip(), ai_model),
         )
         bot = cur.fetchone()
 
@@ -56,13 +97,24 @@ def update_bot(conn: psycopg.Connection, bot_id: int, user_id: int, payload: dic
     fields: list[str] = []
     values: list = []
 
-    for key in ["name", "persona", "topic", "is_active"]:
+    for key in ["name", "persona", "topic", "is_active", "ai_provider", "api_key", "ai_model"]:
         if payload.get(key) is not None:
             fields.append(f"{key} = %s")
-            values.append(payload[key])
+            value = payload[key].strip() if key == "api_key" and isinstance(payload[key], str) else payload[key]
+            values.append(value)
 
     if not fields:
         return get_bot(conn, bot_id, user_id)
+
+    if any(payload.get(k) is not None for k in ["ai_provider", "api_key", "ai_model"]):
+        current = _get_bot_internal(conn, bot_id, user_id)
+        if not current:
+            return None
+        _validate_ai_config(
+            payload.get("ai_provider") or current["ai_provider"],
+            payload.get("api_key") if payload.get("api_key") is not None else (current.get("api_key") or ""),
+            payload.get("ai_model") or current["ai_model"],
+        )
 
     values.extend([bot_id, user_id])
 
@@ -72,7 +124,15 @@ def update_bot(conn: psycopg.Connection, bot_id: int, user_id: int, payload: dic
             UPDATE bots
             SET {', '.join(fields)}, updated_at = NOW()
             WHERE id = %s AND user_id = %s
-            RETURNING id, user_id, name, persona, topic, is_active
+            RETURNING id,
+                      user_id,
+                      name,
+                      persona,
+                      topic,
+                      ai_provider,
+                      ai_model,
+                      (api_key IS NOT NULL AND api_key <> '') AS has_api_key,
+                      is_active
             """,
             tuple(values),
         )
@@ -92,11 +152,40 @@ def delete_bot(conn: psycopg.Connection, bot_id: int, user_id: int) -> bool:
     return deleted
 
 
+def _get_bot_internal(conn: psycopg.Connection, bot_id: int, user_id: int) -> dict | None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id,
+                   user_id,
+                   name,
+                   persona,
+                   topic,
+                   ai_provider,
+                   api_key,
+                   ai_model,
+                   is_active
+            FROM bots
+            WHERE id = %s AND user_id = %s
+            """,
+            (bot_id, user_id),
+        )
+        return cur.fetchone()
+
+
 def get_bot(conn: psycopg.Connection, bot_id: int, user_id: int) -> dict | None:
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT id, user_id, name, persona, topic, is_active
+            SELECT id,
+                   user_id,
+                   name,
+                   persona,
+                   topic,
+                   ai_provider,
+                   ai_model,
+                   (api_key IS NOT NULL AND api_key <> '') AS has_api_key,
+                   is_active
             FROM bots
             WHERE id = %s AND user_id = %s
             """,
