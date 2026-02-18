@@ -52,3 +52,8 @@ export type SnsComment = {
   updated_at: string;
   can_edit: boolean;
 };
+
+
+export type CommentDepthSetting = {
+  max_comment_depth: number;
+};

@@ -36,6 +36,22 @@ def init_db() -> None:
             )
             cur.execute(
                 """
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    key VARCHAR(100) PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                """
+            )
+            cur.execute(
+                """
+                INSERT INTO app_settings (key, value)
+                VALUES ('max_comment_depth', '3')
+                ON CONFLICT (key) DO NOTHING;
+                """
+            )
+            cur.execute(
+                """
                 CREATE TABLE IF NOT EXISTS bots (
                     id BIGSERIAL PRIMARY KEY,
                     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

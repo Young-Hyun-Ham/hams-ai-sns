@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
-import { AIModelListResponse, Bot, apiClient, authHeader } from '../../../lib/api';
+import { AIModelListResponse, Bot, CommentDepthSetting, apiClient, authHeader } from '../../../lib/api';
 import { useAppStore } from '../../../stores/app-store';
 
 type AIProvider = 'mock' | 'gpt' | 'gemini' | 'claude';
@@ -22,6 +22,7 @@ export default function BotSettingsPage() {
   const [aiModel, setAiModel] = useState('');
   const [modelLoading, setModelLoading] = useState(false);
   const [error, setError] = useState('');
+  const [maxCommentDepth, setMaxCommentDepth] = useState(3);
   const resolveToken = () => {
     if (token) return token;
     if (typeof window !== 'undefined') {
@@ -45,6 +46,8 @@ export default function BotSettingsPage() {
     try {
       const res = await apiClient.get<Bot[]>('/bots', { headers: authHeader(accessToken) });
       setBots(res.data);
+      const depthRes = await apiClient.get<CommentDepthSetting>('/settings/comment-depth', { headers: authHeader(accessToken) });
+      setMaxCommentDepth(depthRes.data.max_comment_depth);
       setError('');
     } catch {
       setError('봇 목록 조회 실패');
@@ -130,6 +133,26 @@ export default function BotSettingsPage() {
     loadBots();
   };
 
+
+  const saveDepthSetting = async () => {
+    const accessToken = resolveToken();
+    if (!accessToken) return;
+
+    try {
+      const depth = Math.max(1, Math.min(10, Number(maxCommentDepth) || 1));
+      const res = await apiClient.patch<CommentDepthSetting>(
+        '/settings/comment-depth',
+        { max_comment_depth: depth },
+        { headers: authHeader(accessToken) }
+      );
+      setMaxCommentDepth(res.data.max_comment_depth);
+      setError('');
+    } catch (err: any) {
+      const message = err?.response?.data?.detail ?? '댓글 depth 설정 저장 실패';
+      setError(String(message));
+    }
+  };
+
   const deleteBot = async (botId: number) => {
     const accessToken = resolveToken();
     if (!accessToken) return;
@@ -186,6 +209,25 @@ export default function BotSettingsPage() {
 
         {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
       </section>
+
+
+      <section className="mt-4 rounded-xl border border-border bg-card p-4">
+        <h2 className="mb-2 font-medium">댓글 Depth 설정</h2>
+        <p className="mb-2 text-xs text-fg/70">사용자/AI 모두 이 최대 depth를 넘는 답글 작성이 차단됩니다. (1~10)</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="number"
+            min={1}
+            max={10}
+            className="w-28 rounded-lg border border-border bg-transparent p-2"
+            value={maxCommentDepth}
+            onChange={(e) => setMaxCommentDepth(Number(e.target.value))}
+          />
+          <button className="rounded-lg bg-primary px-3 py-2 text-white" onClick={saveDepthSetting}>저장</button>
+          <button className="rounded-lg border border-border px-3 py-2" onClick={loadBots}>새로고침</button>
+        </div>
+      </section>
+
 
       <section className="mt-4 rounded-xl border border-border bg-card p-4">
         <div className="mb-2 flex items-center justify-between">

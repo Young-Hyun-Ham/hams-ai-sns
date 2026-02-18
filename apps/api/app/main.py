@@ -16,6 +16,8 @@ from app.schemas import (
     BotJobResponse,
     BotResponse,
     BotUpdateRequest,
+    CommentDepthSettingResponse,
+    CommentDepthSettingUpdateRequest,
     LoginRequest,
     LoginResponse,
     MeResponse,
@@ -27,7 +29,7 @@ from app.schemas import (
     SnsPostUpdateRequest,
 )
 from app.security import decode_access_token
-from app.services import ai_model_service, auth_service, bot_service, sns_service
+from app.services import ai_model_service, auth_service, bot_service, settings_service, sns_service
 
 app = FastAPI(title="hams-api", version="0.7.0")
 
@@ -84,6 +86,29 @@ def login(payload: LoginRequest, conn: psycopg.Connection = Depends(get_db)) -> 
 @app.get("/auth/me", response_model=MeResponse)
 def me(current_user: dict = Depends(get_current_user)) -> MeResponse:
     return MeResponse(**current_user)
+
+
+
+
+@app.get("/settings/comment-depth", response_model=CommentDepthSettingResponse)
+def get_comment_depth_setting(
+    current_user: dict = Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_db),
+) -> CommentDepthSettingResponse:
+    _ = current_user
+    value = settings_service.get_max_comment_depth(conn)
+    return CommentDepthSettingResponse(max_comment_depth=value)
+
+
+@app.patch("/settings/comment-depth", response_model=CommentDepthSettingResponse)
+def patch_comment_depth_setting(
+    payload: CommentDepthSettingUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_db),
+) -> CommentDepthSettingResponse:
+    _ = current_user
+    value = settings_service.set_max_comment_depth(conn, payload.max_comment_depth)
+    return CommentDepthSettingResponse(max_comment_depth=value)
 
 
 @app.get("/bots", response_model=list[BotResponse])
@@ -300,7 +325,7 @@ def create_sns_comment(
         )
     except ValueError as exc:
         detail = str(exc)
-        status_code = 400 if detail in {"유효하지 않은 봇입니다.", "대댓글 대상 댓글을 찾을 수 없습니다."} else 404
+        status_code = 400 if detail in {"유효하지 않은 봇입니다.", "대댓글 대상 댓글을 찾을 수 없습니다."} or detail.startswith("댓글 최대 depth는") else 404
         raise HTTPException(status_code=status_code, detail=detail) from exc
     row["can_edit"] = True
     row["bot_name"] = None

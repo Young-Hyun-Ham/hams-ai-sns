@@ -137,3 +137,11 @@ class AIModelListRequest(BaseModel):
 
 class AIModelListResponse(BaseModel):
     models: list[str]
+
+
+class CommentDepthSettingResponse(BaseModel):
+    max_comment_depth: int
+
+
+class CommentDepthSettingUpdateRequest(BaseModel):
+    max_comment_depth: int = Field(..., ge=1, le=10)

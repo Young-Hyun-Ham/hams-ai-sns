@@ -143,6 +143,21 @@ def _bot_has_post_today(conn: psycopg.Connection, bot_id: int) -> bool:
         )
         return cur.fetchone() is not None
 
+
+
+def _get_max_comment_depth(conn: psycopg.Connection, default: int = 3) -> int:
+    with conn.cursor() as cur:
+        cur.execute("SELECT value FROM app_settings WHERE key = 'max_comment_depth'")
+        row = cur.fetchone()
+        if not row:
+            return default
+    try:
+        value = int(row["value"])
+    except (ValueError, TypeError):
+        return default
+    return max(1, min(10, value))
+
+
 def _generate_with_retry(generate_fn) -> str:
     last_error = ""
     for i in range(AI_MAX_RETRIES + 1):
@@ -214,13 +229,71 @@ def _pick_latest_post_without_comment(conn: psycopg.Connection, user_id: int, bo
         return cur.fetchone()
 
 
+def _pick_latest_comment_without_reply(conn: psycopg.Connection, user_id: int, bot_id: int, max_depth: int) -> dict | None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            WITH RECURSIVE comment_depth AS (
+                SELECT id, parent_comment_id, 1 AS depth
+                FROM sns_comments
+                WHERE parent_comment_id IS NULL
+
+                UNION ALL
+
+                SELECT c.id, c.parent_comment_id, cd.depth + 1
+                FROM sns_comments c
+                INNER JOIN comment_depth cd ON c.parent_comment_id = cd.id
+            )
+            SELECT p.id AS post_id,
+                   p.title,
+                   p.category,
+                   p.content,
+                   c.id AS parent_comment_id,
+                   c.content AS parent_comment_content,
+                   cd.depth AS parent_depth
+            FROM sns_comments c
+            INNER JOIN comment_depth cd ON cd.id = c.id
+            INNER JOIN sns_posts p ON p.id = c.post_id
+            WHERE p.user_id = %s
+              AND (c.bot_id IS NULL OR c.bot_id <> %s)
+              AND cd.depth < %s
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM sns_comments r
+                  WHERE r.parent_comment_id = c.id
+                    AND r.bot_id = %s
+              )
+            ORDER BY c.created_at DESC
+            LIMIT 1
+            """,
+            (user_id, bot_id, max_depth, bot_id),
+        )
+        return cur.fetchone()
+
+
 def run_ai_create_comment(conn: psycopg.Connection, bot: dict, payload: dict | str) -> str:
     if isinstance(payload, str):
         payload = json.loads(payload)
 
-    target_post = _pick_latest_post_without_comment(conn, bot["user_id"], bot["id"])
+    prefer_reply = bool(payload.get("prefer_reply", True))
+    max_depth = _get_max_comment_depth(conn)
+    target_comment = _pick_latest_comment_without_reply(conn, bot["user_id"], bot["id"], max_depth) if prefer_reply and max_depth > 1 else None
+
+    target_post = None
+    parent_comment_id = None
+    if target_comment:
+        target_post = {
+            "id": target_comment["post_id"],
+            "title": target_comment["title"],
+            "category": target_comment["category"],
+            "content": target_comment["content"],
+        }
+        parent_comment_id = target_comment["parent_comment_id"]
+    else:
+        target_post = _pick_latest_post_without_comment(conn, bot["user_id"], bot["id"])
+
     if not target_post:
-        return f"{bot['name']} 봇 댓글 대상 게시글이 없어 건너뜀"
+        return f"{bot['name']} 봇 댓글/대댓글 대상이 없어 건너뜀"
 
     tone = payload.get("tone", "supportive")
     fallback = payload.get("fallback", "좋은 글 감사합니다.")
@@ -244,14 +317,16 @@ def run_ai_create_comment(conn: psycopg.Connection, bot: dict, payload: dict | s
     with conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO sns_comments (post_id, user_id, bot_id, content)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO sns_comments (post_id, user_id, bot_id, parent_comment_id, content)
+            VALUES (%s, %s, %s, %s, %s)
             RETURNING id
             """,
-            (target_post["id"], bot["user_id"], bot["id"], comment),
+            (target_post["id"], bot["user_id"], bot["id"], parent_comment_id, comment),
         )
         row = cur.fetchone()
 
+    if parent_comment_id:
+        return f"{bot['name']} 봇이 게시글 #{target_post['id']} 댓글 #{parent_comment_id}에 대댓글 #{row['id']} 등록"
     return f"{bot['name']} 봇이 게시글 #{target_post['id']}에 댓글 #{row['id']} 등록"
 
 

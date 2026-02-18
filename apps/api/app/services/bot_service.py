@@ -78,7 +78,7 @@ def create_bot(
             (
                 bot["id"],
                 "ai_create_comment",
-                json.dumps({"tone": "supportive", "fallback": "좋은 인사이트 감사합니다!"}),
+                json.dumps({"tone": "supportive", "fallback": "좋은 인사이트 감사합니다!", "prefer_reply": True}),
                 COMMENT_JOB_INTERVAL_SECONDS,
             ),
         ]

@@ -1,5 +1,8 @@
 import psycopg
 
+from app.services import settings_service
+
+
 
 def list_public_posts(conn: psycopg.Connection) -> list[dict]:
     with conn.cursor() as cur:
@@ -62,31 +65,18 @@ def is_post_owner(conn: psycopg.Connection, post_id: int, user_id: int) -> bool:
         return cur.fetchone() is not None
 
 
-def _has_post_today(conn: psycopg.Connection, user_id: int, bot_id: int | None) -> bool:
+def _has_post_today_by_bot(conn: psycopg.Connection, bot_id: int) -> bool:
     with conn.cursor() as cur:
-        if bot_id is None:
-            cur.execute(
-                """
-                SELECT 1
-                FROM sns_posts
-                WHERE user_id = %s
-                  AND bot_id IS NULL
-                  AND created_at >= date_trunc('day', NOW())
-                LIMIT 1
-                """,
-                (user_id,),
-            )
-        else:
-            cur.execute(
-                """
-                SELECT 1
-                FROM sns_posts
-                WHERE bot_id = %s
-                  AND created_at >= date_trunc('day', NOW())
-                LIMIT 1
-                """,
-                (bot_id,),
-            )
+        cur.execute(
+            """
+            SELECT 1
+            FROM sns_posts
+            WHERE bot_id = %s
+              AND created_at >= date_trunc('day', NOW())
+            LIMIT 1
+            """,
+            (bot_id,),
+        )
         return cur.fetchone() is not None
 
 
@@ -105,8 +95,8 @@ def create_post(
             if not cur.fetchone():
                 raise ValueError("유효하지 않은 봇입니다.")
 
-    if _has_post_today(conn, user_id, bot_id):
-        raise ValueError("글 작성은 하루에 한 번만 가능합니다.")
+    if bot_id is not None and _has_post_today_by_bot(conn, bot_id):
+        raise ValueError("봇은 하루에 한 번만 글을 작성할 수 있습니다.")
 
     with conn.cursor() as cur:
         cur.execute(
@@ -210,6 +200,41 @@ def list_comments(conn: psycopg.Connection, post_id: int) -> list[dict]:
         return list(cur.fetchall())
 
 
+def _get_comment_depth(conn: psycopg.Connection, comment_id: int) -> int:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            WITH RECURSIVE ancestors AS (
+                SELECT id, parent_comment_id, 1 AS depth
+                FROM sns_comments
+                WHERE id = %s
+
+                UNION ALL
+
+                SELECT p.id, p.parent_comment_id, ancestors.depth + 1
+                FROM sns_comments p
+                INNER JOIN ancestors ON ancestors.parent_comment_id = p.id
+            )
+            SELECT COALESCE(MAX(depth), 0) AS depth
+            FROM ancestors
+            """,
+            (comment_id,),
+        )
+        row = cur.fetchone()
+        return int(row["depth"]) if row else 0
+
+
+def _validate_comment_depth(conn: psycopg.Connection, parent_comment_id: int | None) -> None:
+    if parent_comment_id is None:
+        return
+
+    max_depth = settings_service.get_max_comment_depth(conn)
+    parent_depth = _get_comment_depth(conn, parent_comment_id)
+    next_depth = parent_depth + 1
+    if next_depth > max_depth:
+        raise ValueError(f"댓글 최대 depth는 {max_depth}입니다.")
+
+
 def create_comment(
     conn: psycopg.Connection,
     post_id: int,
@@ -234,6 +259,8 @@ def create_comment(
             )
             if not cur.fetchone():
                 raise ValueError("대댓글 대상 댓글을 찾을 수 없습니다.")
+
+            _validate_comment_depth(conn, parent_comment_id)
 
         cur.execute(
             """
