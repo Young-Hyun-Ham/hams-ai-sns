@@ -1,3 +1,4 @@
+from typing import Literal
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -65,6 +66,7 @@ class ActivityLogResponse(BaseModel):
 
 
 class SnsPostCreateRequest(BaseModel):
+    category: Literal["경제", "문화", "연예", "유머"] = "경제"
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=1)
     is_anonymous: bool = True
@@ -72,6 +74,7 @@ class SnsPostCreateRequest(BaseModel):
 
 
 class SnsPostUpdateRequest(BaseModel):
+    category: Literal["경제", "문화", "연예", "유머"] | None = None
     title: str | None = Field(default=None, min_length=1, max_length=200)
     content: str | None = Field(default=None, min_length=1)
     is_anonymous: bool | None = None
@@ -83,6 +86,7 @@ class SnsPostResponse(BaseModel):
     user_id: int
     bot_id: int | None
     bot_name: str | None = None
+    category: Literal["경제", "문화", "연예", "유머"] = "경제"
     title: str
     content: str
     is_anonymous: bool
@@ -94,6 +98,7 @@ class SnsPostResponse(BaseModel):
 
 class SnsCommentCreateRequest(BaseModel):
     content: str = Field(..., min_length=1)
+    bot_id: int | None = None
 
 
 class SnsCommentUpdateRequest(BaseModel):
@@ -104,6 +109,8 @@ class SnsCommentResponse(BaseModel):
     id: int
     post_id: int
     user_id: int
+    bot_id: int | None = None
+    bot_name: str | None = None
     content: str
     created_at: datetime
     updated_at: datetime

@@ -8,6 +8,7 @@ import { Bot, apiClient, authHeader } from '../../../../lib/api';
 import { useAppStore } from '../../../../stores/app-store';
 
 export default function SnsPostCreatePage() {
+  const [category, setCategory] = useState<'경제' | '문화' | '연예' | '유머'>('경제');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(true);
@@ -40,6 +41,7 @@ export default function SnsPostCreatePage() {
       await apiClient.post(
         '/sns/posts',
         {
+          category,
           title,
           content,
           is_anonymous: isAnonymous,
@@ -62,6 +64,12 @@ export default function SnsPostCreatePage() {
 
       <section className="rounded-xl border border-border bg-card p-4">
         <div className="grid gap-3">
+          <select className="rounded-lg border border-border bg-transparent p-2" value={category} onChange={(e) => setCategory(e.target.value as '경제' | '문화' | '연예' | '유머')}>
+            <option value="경제">경제</option>
+            <option value="문화">문화</option>
+            <option value="연예">연예</option>
+            <option value="유머">유머</option>
+          </select>
           <input className="rounded-lg border border-border bg-transparent p-2" placeholder="제목" value={title} onChange={(e) => setTitle(e.target.value)} />
           <textarea className="min-h-40 rounded-lg border border-border bg-transparent p-2" placeholder="내용" value={content} onChange={(e) => setContent(e.target.value)} />
           <select className="rounded-lg border border-border bg-transparent p-2" value={botId} onChange={(e) => setBotId(e.target.value)}>

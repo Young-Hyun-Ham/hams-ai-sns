@@ -13,24 +13,36 @@ class AIProviderError(Exception):
 
 
 class AIProvider:
-    def generate_post(self, persona: str, topic: str, tone: str, recent_posts: list[str] | None = None) -> str:
+    def generate_post(
+        self,
+        persona: str,
+        topic: str,
+        category: str,
+        tone: str,
+        recent_posts: list[str] | None = None,
+    ) -> str:
         raise NotImplementedError
 
     def generate_comment(
         self,
         persona: str,
         post_title: str,
+        post_category: str,
         post_content: str,
         tone: str,
         recent_comments: list[str] | None = None,
     ) -> str:
         raise NotImplementedError
 
-    def generate_comment(self, persona: str, post_title: str, post_content: str, tone: str) -> str:
-        raise NotImplementedError
-
 
 class MockAIProvider(AIProvider):
+    CATEGORY_KEYWORDS = {
+        "경제": ["물가", "금리", "투자", "소비", "예산"],
+        "문화": ["전시", "공연", "책", "영화", "취향"],
+        "연예": ["컴백", "예능", "드라마", "배우", "팬"],
+        "유머": ["밈", "웃김", "드립", "반전", "썰"],
+    }
+
     def _seed(self, *parts: str) -> int:
         raw = "|".join(parts)
         return int(hashlib.sha256(raw.encode("utf-8")).hexdigest()[:8], 16)
@@ -46,75 +58,72 @@ class MockAIProvider(AIProvider):
                 return w
         return "이 포인트"
 
-    def generate_post(self, persona: str, topic: str, tone: str, recent_posts: list[str] | None = None) -> str:
+    def generate_post(
+        self,
+        persona: str,
+        topic: str,
+        category: str,
+        tone: str,
+        recent_posts: list[str] | None = None,
+    ) -> str:
         recent_posts = recent_posts or []
-        seed = self._seed(persona, topic, tone, "|".join(recent_posts[-3:]))
+        seed = self._seed(persona, topic, category, tone, "|".join(recent_posts[-3:]))
+        keyword = self._pick(self.CATEGORY_KEYWORDS.get(category, [topic]), seed)
 
         hooks = [
-            f"요즘 {topic} 하면서 가장 의외였던 건, 도구보다 운영 습관이 성과를 더 크게 좌우한다는 점이었습니다.",
-            f"{topic}를 팀에 적용해보니, 처음엔 자동화보다 기준 정리가 더 오래 걸리더군요.",
-            f"{topic}는 기술보다 의사결정 속도를 바꾸는 도구라는 생각이 점점 강해집니다.",
-            f"{topic}를 써보면 결국 '무엇을 자동화하지 않을지'를 정하는 게 핵심이더라고요.",
+            f"[{category}] 요즘 {keyword} 이슈를 보면 체감이 꽤 크더라고요.",
+            f"[{category}] {topic} 얘기에서 결국 {keyword}가 핵심이라는 생각이 들었습니다.",
+            f"[{category}] 최근 {keyword} 흐름 보면서 팀 운영 기준을 다시 잡았습니다.",
+            f"[{category}] {keyword} 관점에서 보면 예상과 다른 결과가 자주 나오네요.",
         ]
         bodies = [
-            "이번엔 반복 업무를 3개로 쪼개고, 실패 로그를 먼저 보는 방식으로 바꿨더니 재작업 시간이 확 줄었습니다.",
-            "특히 입력 포맷을 표준화한 뒤부터는 결과 품질 편차가 줄어 운영 스트레스가 크게 줄었어요.",
-            "작게 실험하고 바로 지표를 보는 루프로 바꾸니, 감에 의존하던 우선순위가 꽤 명확해졌습니다.",
-            "초기에 완성도를 욕심내기보다 1주 단위 실험으로 끊으니 도입 저항이 확실히 낮아졌습니다.",
+            "작게 실험해보니 숫자보다 맥락을 먼저 맞추는 쪽이 시행착오를 줄였습니다.",
+            "초반엔 의견이 갈렸는데 기준을 문서로 맞춘 뒤 속도가 꽤 안정됐습니다.",
+            "현장에서는 정답보다 합의 순서가 더 중요하다는 걸 다시 느꼈어요.",
+            "이번 주엔 실제 사례 2개를 비교해보면서 의외의 공통점을 찾았습니다.",
         ]
         endings = [
-            "비슷한 상황이라면 먼저 어디를 자동화할지보다 어떤 실패를 빨리 볼지부터 정해보세요.",
-            "같은 고민 중인 분들은 기준표부터 만들어보면 시행착오를 꽤 줄일 수 있습니다.",
-            "저는 다음 실험에서 응답 품질 점검 자동화를 붙여보려 합니다.",
-            "이 방식이 정답은 아니지만, 적어도 팀 합의 속도는 확실히 빨라졌습니다.",
+            "비슷한 주제 다뤄보신 분들은 어떤 기준으로 판단하시는지 궁금합니다.",
+            "저는 다음엔 반대 케이스도 같이 검토해보려고 합니다.",
+            "오히려 작은 변화부터 확인하는 게 리스크를 줄여주더라고요.",
+            "다들 같은 상황이라면 어떤 선택을 먼저 하실 건가요?",
         ]
-        hashtags = ["#업무자동화 #운영", "#AI실험 #프로덕트", "#MVP #실행", ""]
 
-        text = " ".join(
-            [
-                self._pick(hooks, seed),
-                self._pick(bodies, seed, 1),
-                self._pick(endings, seed, 2),
-                self._pick(hashtags, seed, 3),
-            ]
-        ).strip()
-
+        text = " ".join([self._pick(hooks, seed), self._pick(bodies, seed, 1), self._pick(endings, seed, 2)]).strip()
         if text in recent_posts:
-            text = f"{text} (이번에는 운영 체크리스트를 먼저 손봤습니다.)"
+            text = f"{text} (이번엔 반례도 같이 기록해봤습니다.)"
         return text
 
     def generate_comment(
         self,
         persona: str,
         post_title: str,
+        post_category: str,
         post_content: str,
         tone: str,
         recent_comments: list[str] | None = None,
     ) -> str:
         recent_comments = recent_comments or []
-        keyword = self._extract_keyword(f"{post_title} {post_content}")
-        seed = self._seed(persona, post_title, post_content, tone, "|".join(recent_comments[-3:]))
+        keyword = self._extract_keyword(f"{post_title} {post_content} {post_category}")
+        seed = self._seed(persona, post_title, post_category, post_content, tone, "|".join(recent_comments[-3:]))
 
         reactions = [
-            f"{keyword}를 먼저 잡고 들어가신 접근이 좋아 보입니다.",
-            f"특히 {keyword} 부분은 바로 적용 가능한 힌트라 도움이 되네요.",
-            f"저도 {keyword}에서 막혔는데, 글의 순서가 이해에 큰 도움이 됐습니다.",
-            f"{keyword}를 이렇게 풀어주니 현업에서 왜 필요한지 더 명확해졌어요.",
+            f"[{post_category}] {keyword} 지점을 먼저 짚은 건 저도 동의해요.",
+            f"[{post_category}] {keyword}는 공감되는데, 적용 순서는 조금 다를 수도 있겠네요.",
+            f"[{post_category}] 저도 {keyword}에서 비슷하게 막혔는데 정리 방식이 깔끔합니다.",
+            f"[{post_category}] {keyword} 관점은 좋고, 반대 사례도 같이 보면 더 선명해질 듯해요.",
         ]
         followups = [
-            "실제로 적용했을 때 가장 먼저 개선된 지표가 무엇이었는지도 궁금합니다.",
-            "다음 글에서 실패했던 케이스도 함께 공유해주시면 더 재밌을 것 같아요.",
-            "혹시 초기 세팅 시간은 어느 정도 들었는지 알려주실 수 있을까요?",
-            "비슷한 환경에서 돌릴 때 주의할 점이 있다면 한 가지만 더 듣고 싶습니다.",
+            "실제로 해보면 첫 1주차에 뭐가 가장 크게 바뀌었는지 궁금합니다.",
+            "근데 비용이나 시간 제약이 있을 때는 어떤 우선순위로 가져가셨나요?",
+            "오히려 작은 단위로 나눠서 검증하면 더 빨리 합의될 수도 있겠더라고요.",
+            "다음에는 실패했던 케이스도 같이 공유해주시면 토론이 더 재밌을 것 같아요.",
         ]
 
         text = f"{self._pick(reactions, seed)} {self._pick(followups, seed, 1)}"
         if text in recent_comments:
             text = f"{self._pick(reactions, seed, 2)} {self._pick(followups, seed, 3)}"
         return text
-
-    def generate_comment(self, persona: str, post_title: str, post_content: str, tone: str) -> str:
-        return f"[{tone}] {persona} 관점에서 공감합니다. 다음 실행 결과도 공유해주시면 좋겠습니다."
 
 
 class OpenAIProvider(AIProvider):
@@ -158,15 +167,30 @@ class OpenAIProvider(AIProvider):
 
         raise AIProviderError("openai response parse failed")
 
-    def generate_post(self, persona: str, topic: str, tone: str, recent_posts: list[str] | None = None) -> str:
+    def generate_post(
+        self,
+        persona: str,
+        topic: str,
+        category: str,
+        tone: str,
+        recent_posts: list[str] | None = None,
+    ) -> str:
         recent = "\n".join(f"- {p}" for p in (recent_posts or [])[-5:]) or "- 없음"
-        prompt = render_prompt("post_text", persona=persona, topic=topic, tone=tone, recent_posts=recent)
+        prompt = render_prompt(
+            "post_text",
+            persona=persona,
+            topic=topic,
+            category=category,
+            tone=tone,
+            recent_posts=recent,
+        )
         return self._request(prompt)
 
     def generate_comment(
         self,
         persona: str,
         post_title: str,
+        post_category: str,
         post_content: str,
         tone: str,
         recent_comments: list[str] | None = None,
@@ -176,6 +200,7 @@ class OpenAIProvider(AIProvider):
             "comment_text",
             persona=persona,
             post_title=post_title,
+            post_category=post_category,
             post_content=post_content,
             tone=tone,
             recent_comments=recent,

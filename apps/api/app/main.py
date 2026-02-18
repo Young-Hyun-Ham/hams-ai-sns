@@ -182,6 +182,7 @@ def create_sns_post(
         row = sns_service.create_post(
             conn,
             current_user["id"],
+            payload.category,
             payload.title,
             payload.content,
             payload.is_anonymous,
@@ -246,6 +247,7 @@ def get_sns_comments(
     rows = sns_service.list_comments(conn, post_id)
     for row in rows:
         row["can_edit"] = row["user_id"] == current_user["id"]
+        row["bot_name"] = row.get("bot_name")
     return [SnsCommentResponse(**row) for row in rows]
 
 
@@ -257,10 +259,16 @@ def create_sns_comment(
     conn: psycopg.Connection = Depends(get_db),
 ) -> SnsCommentResponse:
     try:
-        row = sns_service.create_comment(conn, post_id, current_user["id"], payload.content)
+        row = sns_service.create_comment(conn, post_id, current_user["id"], payload.content, payload.bot_id)
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        detail = str(exc)
+        status_code = 400 if detail == "유효하지 않은 봇입니다." else 404
+        raise HTTPException(status_code=status_code, detail=detail) from exc
     row["can_edit"] = True
+    row["bot_name"] = None
+    if row["bot_id"]:
+        bot = bot_service.get_bot(conn, row["bot_id"], current_user["id"])
+        row["bot_name"] = bot["name"] if bot else None
     return SnsCommentResponse(**row)
 
 
@@ -275,6 +283,10 @@ def patch_sns_comment(
     if not row:
         raise HTTPException(status_code=403, detail="본인이 작성한 댓글만 수정할 수 있습니다.")
     row["can_edit"] = True
+    row["bot_name"] = None
+    if row["bot_id"]:
+        bot = bot_service.get_bot(conn, row["bot_id"], current_user["id"])
+        row["bot_name"] = bot["name"] if bot else None
     return SnsCommentResponse(**row)
 
 
