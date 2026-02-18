@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { Bot, SnsComment, SnsPost, apiClient, authHeader } from '../../../../../lib/api';
 import { useAppStore } from '../../../../../stores/app-store';
@@ -124,6 +124,72 @@ export default function SnsPostEditPage() {
     }
   };
 
+  const { roots, childrenMap } = useMemo(() => {
+    const rootsLocal: SnsComment[] = [];
+    const childrenLocal = new Map<number, SnsComment[]>();
+
+    comments.forEach((comment) => {
+      if (!comment.parent_comment_id) {
+        rootsLocal.push(comment);
+        return;
+      }
+      const arr = childrenLocal.get(comment.parent_comment_id) ?? [];
+      arr.push(comment);
+      childrenLocal.set(comment.parent_comment_id, arr);
+    });
+
+    return { roots: rootsLocal, childrenMap: childrenLocal };
+  }, [comments]);
+
+  const renderEditableComment = (comment: SnsComment) => {
+    const replies = childrenMap.get(comment.id) ?? [];
+
+    return (
+      <li key={comment.id} className="rounded-lg border border-border p-3">
+        {editingCommentId === comment.id ? (
+          <div className="space-y-2">
+            <p className="text-xs text-fg/70">
+              [게시글 #{comment.post_id}] {comment.parent_comment_id ? `댓글 #${comment.parent_comment_id}의 답글` : '최상위 댓글'}
+            </p>
+            <textarea
+              className="w-full rounded-lg border border-border bg-transparent p-2"
+              value={editingCommentText}
+              onChange={(e) => setEditingCommentText(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <button className="whitespace-nowrap rounded border border-border px-2 py-1" onClick={saveComment}>저장</button>
+              <button className="whitespace-nowrap rounded border border-border px-2 py-1" onClick={() => setEditingCommentId(null)}>취소</button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs text-fg/70">
+                [게시글 #{comment.post_id}] {comment.parent_comment_id ? `댓글 #${comment.parent_comment_id}의 답글` : '최상위 댓글'}
+              </p>
+              <p className="text-sm break-words">{comment.content}</p>
+              <p className="text-xs text-fg/70">
+                {comment.bot_name ? `${comment.bot_name} 봇` : '사용자'} · {new Date(comment.created_at).toLocaleString()}
+              </p>
+            </div>
+            {comment.can_edit && (
+              <div className="flex shrink-0 gap-2 text-xs whitespace-nowrap">
+                <button className="whitespace-nowrap rounded border border-border px-2 py-1" onClick={() => startEditComment(comment)}>수정</button>
+                <button className="whitespace-nowrap rounded border border-red-300 px-2 py-1 text-red-500" onClick={() => removeComment(comment.id)}>삭제</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {replies.length > 0 && (
+          <ul className="mt-2 space-y-2 border-l border-border pl-3">
+            {replies.map((reply) => renderEditableComment(reply))}
+          </ul>
+        )}
+      </li>
+    );
+  };
+
   return (
     <main className="mx-auto min-h-[100dvh] max-w-2xl bg-bg px-4 pb-[calc(env(safe-area-inset-bottom)+24px)] pt-[calc(env(safe-area-inset-top)+24px)]">
       <header className="mb-4 flex items-center justify-between">
@@ -165,36 +231,7 @@ export default function SnsPostEditPage() {
         <p className="mb-3 text-xs text-fg/70">수정 화면에서는 댓글 신규 작성이 비활성화됩니다. 댓글 등록은 상세 화면에서 가능합니다.</p>
 
         <ul className="space-y-2">
-          {comments.map((comment) => (
-            <li key={comment.id} className="rounded-lg border border-border p-3">
-              {editingCommentId === comment.id ? (
-                <div className="space-y-2">
-                  <textarea
-                    className="w-full rounded-lg border border-border bg-transparent p-2"
-                    value={editingCommentText}
-                    onChange={(e) => setEditingCommentText(e.target.value)}
-                  />
-                  <div className="flex gap-2">
-                    <button className="whitespace-nowrap rounded border border-border px-2 py-1" onClick={saveComment}>저장</button>
-                    <button className="whitespace-nowrap rounded border border-border px-2 py-1" onClick={() => setEditingCommentId(null)}>취소</button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-sm break-words">{comment.content}</p>
-                    <p className="text-xs text-fg/70">{new Date(comment.created_at).toLocaleString()}</p>
-                  </div>
-                  {comment.can_edit && (
-                    <div className="flex shrink-0 gap-2 text-xs whitespace-nowrap">
-                      <button className="whitespace-nowrap rounded border border-border px-2 py-1" onClick={() => startEditComment(comment)}>수정</button>
-                      <button className="whitespace-nowrap rounded border border-red-300 px-2 py-1 text-red-500" onClick={() => removeComment(comment.id)}>삭제</button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </li>
-          ))}
+          {roots.map((comment) => renderEditableComment(comment))}
         </ul>
       </section>
     </main>
