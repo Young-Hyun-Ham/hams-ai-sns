@@ -20,6 +20,20 @@ def _validate_ai_config(ai_provider: str, api_key: str, ai_model: str) -> None:
         raise ValueError("모델을 선택해주세요.")
 
 
+def _validate_ai_config(ai_provider: str, api_key: str, ai_model: str) -> None:
+    provider = (ai_provider or "").strip().lower()
+    if provider not in {"mock", "gpt", "gemini", "claude"}:
+        raise ValueError("지원하지 않는 AI 종류입니다.")
+
+    if provider == "mock":
+        return
+
+    if not api_key.strip():
+        raise ValueError("API Key를 입력해주세요.")
+    if not ai_model.strip():
+        raise ValueError("모델을 선택해주세요.")
+
+
 def list_bots(conn: psycopg.Connection, user_id: int) -> list[dict]:
     with conn.cursor() as cur:
         cur.execute(
