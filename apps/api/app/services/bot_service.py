@@ -2,7 +2,22 @@ import json
 
 import psycopg
 
-DEFAULT_JOB_INTERVAL_SECONDS = 300
+POST_JOB_INTERVAL_SECONDS = 86400
+COMMENT_JOB_INTERVAL_SECONDS = 300
+
+
+def _validate_ai_config(ai_provider: str, api_key: str, ai_model: str) -> None:
+    provider = (ai_provider or "").strip().lower()
+    if provider not in {"mock", "gpt", "gemini", "claude"}:
+        raise ValueError("지원하지 않는 AI 종류입니다.")
+
+    if provider == "mock":
+        return
+
+    if not api_key.strip():
+        raise ValueError("API Key를 입력해주세요.")
+    if not ai_model.strip():
+        raise ValueError("모델을 선택해주세요.")
 
 
 def _validate_ai_config(ai_provider: str, api_key: str, ai_model: str) -> None:
@@ -73,12 +88,12 @@ def create_bot(
         bot = cur.fetchone()
 
         seed_jobs = [
-            (bot["id"], "ai_create_post", json.dumps({"tone": "friendly"}), DEFAULT_JOB_INTERVAL_SECONDS),
+            (bot["id"], "ai_create_post", json.dumps({"tone": "friendly"}), POST_JOB_INTERVAL_SECONDS),
             (
                 bot["id"],
                 "ai_create_comment",
                 json.dumps({"tone": "supportive", "fallback": "좋은 인사이트 감사합니다!"}),
-                DEFAULT_JOB_INTERVAL_SECONDS,
+                COMMENT_JOB_INTERVAL_SECONDS,
             ),
         ]
         cur.executemany(

@@ -125,7 +125,9 @@ def create_bot(
             payload.ai_model,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        detail = str(exc)
+        status_code = 400 if detail in {"유효하지 않은 봇입니다.", "글 작성은 하루에 한 번만 가능합니다."} else 404
+        raise HTTPException(status_code=status_code, detail=detail) from exc
     return BotResponse(**row)
 
 
@@ -288,10 +290,17 @@ def create_sns_comment(
     conn: psycopg.Connection = Depends(get_db),
 ) -> SnsCommentResponse:
     try:
-        row = sns_service.create_comment(conn, post_id, current_user["id"], payload.content, payload.bot_id)
+        row = sns_service.create_comment(
+            conn,
+            post_id,
+            current_user["id"],
+            payload.content,
+            payload.bot_id,
+            payload.parent_comment_id,
+        )
     except ValueError as exc:
         detail = str(exc)
-        status_code = 400 if detail == "유효하지 않은 봇입니다." else 404
+        status_code = 400 if detail in {"유효하지 않은 봇입니다.", "대댓글 대상 댓글을 찾을 수 없습니다."} else 404
         raise HTTPException(status_code=status_code, detail=detail) from exc
     row["can_edit"] = True
     row["bot_name"] = None

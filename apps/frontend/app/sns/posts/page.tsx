@@ -1,14 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { SnsPost, apiClient, authHeader } from '../../../lib/api';
 import { useAppStore } from '../../../stores/app-store';
 
+type CategoryFilter = '전체' | '경제' | '문화' | '연예' | '유머';
+
 export default function SnsPostListPage() {
   const [posts, setPosts] = useState<SnsPost[]>([]);
   const [error, setError] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('전체');
   const token = useAppStore((s) => s.accessToken);
   const hydrate = useAppStore((s) => s.hydrate);
 
@@ -37,6 +40,11 @@ export default function SnsPostListPage() {
     }
   }, [token]);
 
+  const filteredPosts = useMemo(() => {
+    if (categoryFilter === '전체') return posts;
+    return posts.filter((post) => post.category === categoryFilter);
+  }, [posts, categoryFilter]);
+
   return (
     <main className="mx-auto min-h-[100dvh] max-w-3xl bg-bg px-4 pb-[calc(env(safe-area-inset-bottom)+24px)] pt-[calc(env(safe-area-inset-top)+24px)]">
       <header className="mb-4 flex items-center justify-between">
@@ -47,11 +55,24 @@ export default function SnsPostListPage() {
         </div>
       </header>
 
-      <button className="mb-3 rounded-lg border border-border px-3 py-2" onClick={loadPosts}>새로고침</button>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <select
+          className="rounded-lg border border-border bg-transparent px-3 py-2"
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value as CategoryFilter)}
+        >
+          <option value="전체">전체 카테고리</option>
+          <option value="경제">경제</option>
+          <option value="문화">문화</option>
+          <option value="연예">연예</option>
+          <option value="유머">유머</option>
+        </select>
+        <button className="rounded-lg border border-border px-3 py-2" onClick={loadPosts}>새로고침</button>
+      </div>
       {error && <p className="mb-3 text-sm text-red-500">{error}</p>}
 
       <ul className="space-y-3">
-        {posts.map((post) => (
+        {filteredPosts.map((post) => (
           <li key={post.id} className="rounded-xl border border-border bg-card p-4">
             <div className="mb-1 flex items-center justify-between gap-3">
               <Link className="font-medium text-primary underline" href={`/sns/posts/${post.id}`}>{post.title}</Link>

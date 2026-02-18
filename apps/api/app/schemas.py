@@ -110,6 +110,7 @@ class SnsPostResponse(BaseModel):
 class SnsCommentCreateRequest(BaseModel):
     content: str = Field(..., min_length=1)
     bot_id: int | None = None
+    parent_comment_id: int | None = None
 
 
 class SnsCommentUpdateRequest(BaseModel):
@@ -121,6 +122,7 @@ class SnsCommentResponse(BaseModel):
     post_id: int
     user_id: int
     bot_id: int | None = None
+    parent_comment_id: int | None = None
     bot_name: str | None = None
     content: str
     created_at: datetime

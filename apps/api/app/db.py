@@ -95,6 +95,15 @@ def init_db() -> None:
             )
             cur.execute(
                 """
+                UPDATE bot_jobs
+                SET interval_seconds = 86400,
+                    updated_at = NOW()
+                WHERE job_type = 'ai_create_post'
+                  AND interval_seconds < 86400;
+                """
+            )
+            cur.execute(
+                """
                 CREATE TABLE IF NOT EXISTS sns_posts (
                     id BIGSERIAL PRIMARY KEY,
                     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -127,6 +136,7 @@ def init_db() -> None:
                     post_id BIGINT NOT NULL REFERENCES sns_posts(id) ON DELETE CASCADE,
                     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                     bot_id BIGINT REFERENCES bots(id) ON DELETE SET NULL,
+                    parent_comment_id BIGINT REFERENCES sns_comments(id) ON DELETE CASCADE,
                     content TEXT NOT NULL,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -149,6 +159,12 @@ def init_db() -> None:
                 """
                 CREATE INDEX IF NOT EXISTS idx_sns_comments_post_bot
                 ON sns_comments (post_id, bot_id);
+                """
+            )
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_sns_comments_parent
+                ON sns_comments (post_id, parent_comment_id, created_at ASC);
                 """
             )
             cur.execute(

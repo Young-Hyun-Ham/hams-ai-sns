@@ -127,6 +127,22 @@ def _recent_comments_by_bot(conn: psycopg.Connection, bot_id: int, limit: int = 
         )
         return [row["content"] for row in cur.fetchall()]
 
+
+
+def _bot_has_post_today(conn: psycopg.Connection, bot_id: int) -> bool:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT 1
+            FROM sns_posts
+            WHERE bot_id = %s
+              AND created_at >= date_trunc('day', NOW())
+            LIMIT 1
+            """,
+            (bot_id,),
+        )
+        return cur.fetchone() is not None
+
 def _generate_with_retry(generate_fn) -> str:
     last_error = ""
     for i in range(AI_MAX_RETRIES + 1):
@@ -142,6 +158,9 @@ def _generate_with_retry(generate_fn) -> str:
 def run_ai_create_post(conn: psycopg.Connection, bot: dict, payload: dict | str) -> str:
     if isinstance(payload, str):
         payload = json.loads(payload)
+
+    if _bot_has_post_today(conn, bot["id"]):
+        return f"{bot['name']} 봇은 오늘 이미 글을 작성해 건너뜀"
 
     tone = payload.get("tone", "neutral")
     category = _normalize_category(payload.get("category"))
