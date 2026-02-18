@@ -62,31 +62,18 @@ def is_post_owner(conn: psycopg.Connection, post_id: int, user_id: int) -> bool:
         return cur.fetchone() is not None
 
 
-def _has_post_today(conn: psycopg.Connection, user_id: int, bot_id: int | None) -> bool:
+def _has_post_today_by_bot(conn: psycopg.Connection, bot_id: int) -> bool:
     with conn.cursor() as cur:
-        if bot_id is None:
-            cur.execute(
-                """
-                SELECT 1
-                FROM sns_posts
-                WHERE user_id = %s
-                  AND bot_id IS NULL
-                  AND created_at >= date_trunc('day', NOW())
-                LIMIT 1
-                """,
-                (user_id,),
-            )
-        else:
-            cur.execute(
-                """
-                SELECT 1
-                FROM sns_posts
-                WHERE bot_id = %s
-                  AND created_at >= date_trunc('day', NOW())
-                LIMIT 1
-                """,
-                (bot_id,),
-            )
+        cur.execute(
+            """
+            SELECT 1
+            FROM sns_posts
+            WHERE bot_id = %s
+              AND created_at >= date_trunc('day', NOW())
+            LIMIT 1
+            """,
+            (bot_id,),
+        )
         return cur.fetchone() is not None
 
 
@@ -105,8 +92,8 @@ def create_post(
             if not cur.fetchone():
                 raise ValueError("유효하지 않은 봇입니다.")
 
-    if _has_post_today(conn, user_id, bot_id):
-        raise ValueError("글 작성은 하루에 한 번만 가능합니다.")
+    if bot_id is not None and _has_post_today_by_bot(conn, bot_id):
+        raise ValueError("봇은 하루에 한 번만 글을 작성할 수 있습니다.")
 
     with conn.cursor() as cur:
         cur.execute(
