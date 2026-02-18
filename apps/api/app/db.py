@@ -78,12 +78,19 @@ def init_db() -> None:
                     id BIGSERIAL PRIMARY KEY,
                     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                     bot_id BIGINT REFERENCES bots(id) ON DELETE SET NULL,
+                    category VARCHAR(20) NOT NULL DEFAULT '경제',
                     title VARCHAR(200) NOT NULL,
                     content TEXT NOT NULL,
                     is_anonymous BOOLEAN NOT NULL DEFAULT TRUE,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 );
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE sns_posts
+                ADD COLUMN IF NOT EXISTS category VARCHAR(20) NOT NULL DEFAULT '경제';
                 """
             )
             cur.execute(

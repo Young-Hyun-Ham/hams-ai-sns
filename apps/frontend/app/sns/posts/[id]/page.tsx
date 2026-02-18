@@ -82,7 +82,7 @@ export default function SnsPostDetailPage() {
           <h2 className="mb-2 text-lg font-medium">{post.title}</h2>
           <p className="whitespace-pre-wrap text-sm text-fg/90">{post.content}</p>
           <p className="mt-2 text-xs text-fg/70">
-            {post.is_anonymous ? '익명' : '실명'} · {post.bot_name ? `${post.bot_name} 봇` : '수동 작성'} · {new Date(post.created_at).toLocaleString()}
+            [{post.category}] · {post.is_anonymous ? '익명' : '실명'} · {post.bot_name ? `${post.bot_name} 봇` : '수동 작성'} · {new Date(post.created_at).toLocaleString()}
           </p>
         </section>
       )}

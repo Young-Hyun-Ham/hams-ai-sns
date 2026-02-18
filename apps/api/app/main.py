@@ -182,6 +182,7 @@ def create_sns_post(
         row = sns_service.create_post(
             conn,
             current_user["id"],
+            payload.category,
             payload.title,
             payload.content,
             payload.is_anonymous,

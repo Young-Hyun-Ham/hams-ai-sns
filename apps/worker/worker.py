@@ -16,6 +16,27 @@ AI_MAX_RETRIES = int(os.getenv("AI_MAX_RETRIES", "2"))
 AI_RETRY_DELAY_SECONDS = int(os.getenv("AI_RETRY_DELAY_SECONDS", "2"))
 
 
+POST_CATEGORIES = ("경제", "문화", "연예", "유머")
+
+
+def _normalize_category(value: str | None) -> str:
+    if value in POST_CATEGORIES:
+        return value
+    return "경제"
+
+
+def _infer_category_from_topic(topic: str) -> str:
+    text = (topic or "").lower()
+    if any(k in text for k in ["주식", "투자", "경제", "금리", "부동산", "시장"]):
+        return "경제"
+    if any(k in text for k in ["영화", "전시", "도서", "문화", "공연", "예술"]):
+        return "문화"
+    if any(k in text for k in ["연예", "아이돌", "배우", "드라마", "예능", "가수"]):
+        return "연예"
+    if any(k in text for k in ["밈", "유머", "개그", "썰", "드립"]):
+        return "유머"
+    return "경제"
+
 class WorkerError(Exception):
     pass
 
@@ -123,12 +144,16 @@ def run_ai_create_post(conn: psycopg.Connection, bot: dict, payload: dict | str)
         payload = json.loads(payload)
 
     tone = payload.get("tone", "neutral")
+    category = _normalize_category(payload.get("category"))
+    if "category" not in payload:
+        category = _infer_category_from_topic(bot["topic"])
     provider = get_provider()
     recent_posts = _recent_posts_by_bot(conn, bot["id"], limit=5)
     ai_text = _generate_with_retry(
         lambda: provider.generate_post(
             persona=bot["persona"],
             topic=bot["topic"],
+            category=category,
             tone=tone,
             recent_posts=recent_posts,
         )
@@ -137,11 +162,11 @@ def run_ai_create_post(conn: psycopg.Connection, bot: dict, payload: dict | str)
     with conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO sns_posts (user_id, bot_id, title, content, is_anonymous)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO sns_posts (user_id, bot_id, category, title, content, is_anonymous)
+            VALUES (%s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
-            (bot["user_id"], bot["id"], f"{bot['name']}의 자동 글", ai_text, True),
+            (bot["user_id"], bot["id"], category, f"{bot['name']}의 자동 글", ai_text, True),
         )
         post = cur.fetchone()
 
@@ -152,7 +177,7 @@ def _pick_latest_post_without_comment(conn: psycopg.Connection, user_id: int, bo
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT p.id, p.title, p.content
+            SELECT p.id, p.title, p.category, p.content
             FROM sns_posts p
             WHERE p.user_id = %s
               AND (p.bot_id IS NULL OR p.bot_id <> %s)
@@ -188,6 +213,7 @@ def run_ai_create_comment(conn: psycopg.Connection, bot: dict, payload: dict | s
             lambda: provider.generate_comment(
                 persona=bot["persona"],
                 post_title=target_post["title"],
+                post_category=target_post["category"],
                 post_content=target_post["content"],
                 tone=tone,
                 recent_comments=recent_comments,

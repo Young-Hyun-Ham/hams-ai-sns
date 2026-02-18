@@ -8,6 +8,7 @@ def list_public_posts(conn: psycopg.Connection) -> list[dict]:
             SELECT p.id,
                    p.user_id,
                    p.bot_id,
+                   p.category,
                    p.title,
                    p.content,
                    p.is_anonymous,
@@ -34,6 +35,7 @@ def get_post_by_id(conn: psycopg.Connection, post_id: int) -> dict | None:
             SELECT p.id,
                    p.user_id,
                    p.bot_id,
+                   p.category,
                    p.title,
                    p.content,
                    p.is_anonymous,
@@ -63,6 +65,7 @@ def is_post_owner(conn: psycopg.Connection, post_id: int, user_id: int) -> bool:
 def create_post(
     conn: psycopg.Connection,
     user_id: int,
+    category: str,
     title: str,
     content: str,
     is_anonymous: bool,
@@ -76,18 +79,19 @@ def create_post(
 
         cur.execute(
             """
-            INSERT INTO sns_posts (user_id, bot_id, title, content, is_anonymous)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO sns_posts (user_id, bot_id, category, title, content, is_anonymous)
+            VALUES (%s, %s, %s, %s, %s, %s)
             RETURNING id,
                       user_id,
                       bot_id,
+                      category,
                       title,
                       content,
                       is_anonymous,
                       created_at,
                       updated_at
             """,
-            (user_id, bot_id, title, content, is_anonymous),
+            (user_id, bot_id, category, title, content, is_anonymous),
         )
         row = cur.fetchone()
         conn.commit()
@@ -103,7 +107,7 @@ def update_post(
     if not is_post_owner(conn, post_id, user_id):
         return None
 
-    allowed_keys = {"title", "content", "is_anonymous", "bot_id"}
+    allowed_keys = {"category", "title", "content", "is_anonymous", "bot_id"}
     updates = {key: value for key, value in payload.items() if key in allowed_keys and value is not None}
 
     if "bot_id" in updates:
@@ -129,6 +133,7 @@ def update_post(
             RETURNING id,
                       user_id,
                       bot_id,
+                      category,
                       title,
                       content,
                       is_anonymous,

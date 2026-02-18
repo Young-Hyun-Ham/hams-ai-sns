@@ -20,6 +20,7 @@ export type SnsPost = {
   user_id: number;
   bot_id: number | null;
   bot_name: string | null;
+  category: "경제" | "문화" | "연예" | "유머";
   title: string;
   content: string;
   is_anonymous: boolean;
