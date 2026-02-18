@@ -98,6 +98,7 @@ def init_db() -> None:
                     id BIGSERIAL PRIMARY KEY,
                     post_id BIGINT NOT NULL REFERENCES sns_posts(id) ON DELETE CASCADE,
                     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    bot_id BIGINT REFERENCES bots(id) ON DELETE SET NULL,
                     content TEXT NOT NULL,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -106,8 +107,20 @@ def init_db() -> None:
             )
             cur.execute(
                 """
+                ALTER TABLE sns_comments
+                ADD COLUMN IF NOT EXISTS bot_id BIGINT REFERENCES bots(id) ON DELETE SET NULL;
+                """
+            )
+            cur.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_sns_comments_post_created
                 ON sns_comments (post_id, created_at ASC);
+                """
+            )
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_sns_comments_post_bot
+                ON sns_comments (post_id, bot_id);
                 """
             )
             cur.execute(
