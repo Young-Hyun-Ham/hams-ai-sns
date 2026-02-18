@@ -151,6 +151,12 @@ def init_db() -> None:
             )
             cur.execute(
                 """
+                ALTER TABLE sns_comments
+                ADD COLUMN IF NOT EXISTS parent_comment_id BIGINT REFERENCES sns_comments(id) ON DELETE CASCADE;
+                """
+            )
+            cur.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_sns_comments_post_created
                 ON sns_comments (post_id, created_at ASC);
                 """
