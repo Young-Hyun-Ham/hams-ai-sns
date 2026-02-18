@@ -17,11 +17,14 @@ from app.schemas import (
     LoginRequest,
     LoginResponse,
     MeResponse,
+    SnsPostCreateRequest,
+    SnsPostResponse,
+    SnsPostUpdateRequest,
 )
 from app.security import decode_access_token
-from app.services import auth_service, bot_service
+from app.services import auth_service, bot_service, sns_service
 
-app = FastAPI(title="hams-api", version="0.4.0")
+app = FastAPI(title="hams-api", version="0.5.0")
 
 
 def _parse_cors_origins() -> list[str]:
@@ -140,6 +143,86 @@ def get_activity_logs(
 ) -> list[ActivityLogResponse]:
     rows = bot_service.list_activity_logs(conn, current_user["id"], limit=limit)
     return [ActivityLogResponse(**row) for row in rows]
+
+
+@app.get("/sns/posts", response_model=list[SnsPostResponse])
+def get_sns_posts(
+    current_user: dict = Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_db),
+) -> list[SnsPostResponse]:
+    rows = sns_service.list_posts(conn, current_user["id"])
+    return [SnsPostResponse(**row) for row in rows]
+
+
+@app.get("/sns/posts/{post_id}", response_model=SnsPostResponse)
+def get_sns_post(
+    post_id: int,
+    current_user: dict = Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_db),
+) -> SnsPostResponse:
+    row = sns_service.get_post(conn, post_id, current_user["id"])
+    if not row:
+        raise HTTPException(status_code=404, detail="게시글을 찾을 수 없습니다.")
+    return SnsPostResponse(**row)
+
+
+@app.post("/sns/posts", response_model=SnsPostResponse, status_code=201)
+def create_sns_post(
+    payload: SnsPostCreateRequest,
+    current_user: dict = Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_db),
+) -> SnsPostResponse:
+    try:
+        row = sns_service.create_post(
+            conn,
+            current_user["id"],
+            payload.title,
+            payload.content,
+            payload.is_anonymous,
+            payload.bot_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    row["bot_name"] = None
+    if row["bot_id"]:
+        bot = bot_service.get_bot(conn, row["bot_id"], current_user["id"])
+        row["bot_name"] = bot["name"] if bot else None
+    return SnsPostResponse(**row)
+
+
+@app.patch("/sns/posts/{post_id}", response_model=SnsPostResponse)
+def patch_sns_post(
+    post_id: int,
+    payload: SnsPostUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_db),
+) -> SnsPostResponse:
+    try:
+        row = sns_service.update_post(conn, post_id, current_user["id"], payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not row:
+        raise HTTPException(status_code=404, detail="게시글을 찾을 수 없습니다.")
+
+    row["bot_name"] = None
+    if row["bot_id"]:
+        bot = bot_service.get_bot(conn, row["bot_id"], current_user["id"])
+        row["bot_name"] = bot["name"] if bot else None
+    return SnsPostResponse(**row)
+
+
+@app.delete("/sns/posts/{post_id}", status_code=204)
+def remove_sns_post(
+    post_id: int,
+    current_user: dict = Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_db),
+) -> Response:
+    deleted = sns_service.delete_post(conn, post_id, current_user["id"])
+    if not deleted:
+        raise HTTPException(status_code=404, detail="게시글을 찾을 수 없습니다.")
+    return Response(status_code=204)
 
 
 @app.websocket("/ws/activity")

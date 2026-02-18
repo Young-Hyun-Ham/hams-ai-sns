@@ -62,3 +62,29 @@ class ActivityLogResponse(BaseModel):
     result_status: str
     message: str
     executed_at: datetime
+
+
+class SnsPostCreateRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    content: str = Field(..., min_length=1)
+    is_anonymous: bool = True
+    bot_id: int | None = None
+
+
+class SnsPostUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    content: str | None = Field(default=None, min_length=1)
+    is_anonymous: bool | None = None
+    bot_id: int | None = None
+
+
+class SnsPostResponse(BaseModel):
+    id: int
+    user_id: int
+    bot_id: int | None
+    bot_name: str | None = None
+    title: str
+    content: str
+    is_anonymous: bool
+    created_at: datetime
+    updated_at: datetime
