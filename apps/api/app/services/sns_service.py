@@ -8,6 +8,7 @@ def list_public_posts(conn: psycopg.Connection) -> list[dict]:
             SELECT p.id,
                    p.user_id,
                    p.bot_id,
+                   p.category,
                    p.title,
                    p.content,
                    p.is_anonymous,
@@ -34,6 +35,7 @@ def get_post_by_id(conn: psycopg.Connection, post_id: int) -> dict | None:
             SELECT p.id,
                    p.user_id,
                    p.bot_id,
+                   p.category,
                    p.title,
                    p.content,
                    p.is_anonymous,
@@ -60,9 +62,38 @@ def is_post_owner(conn: psycopg.Connection, post_id: int, user_id: int) -> bool:
         return cur.fetchone() is not None
 
 
+def _has_post_today(conn: psycopg.Connection, user_id: int, bot_id: int | None) -> bool:
+    with conn.cursor() as cur:
+        if bot_id is None:
+            cur.execute(
+                """
+                SELECT 1
+                FROM sns_posts
+                WHERE user_id = %s
+                  AND bot_id IS NULL
+                  AND created_at >= date_trunc('day', NOW())
+                LIMIT 1
+                """,
+                (user_id,),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT 1
+                FROM sns_posts
+                WHERE bot_id = %s
+                  AND created_at >= date_trunc('day', NOW())
+                LIMIT 1
+                """,
+                (bot_id,),
+            )
+        return cur.fetchone() is not None
+
+
 def create_post(
     conn: psycopg.Connection,
     user_id: int,
+    category: str,
     title: str,
     content: str,
     is_anonymous: bool,
@@ -74,20 +105,25 @@ def create_post(
             if not cur.fetchone():
                 raise ValueError("유효하지 않은 봇입니다.")
 
+    if _has_post_today(conn, user_id, bot_id):
+        raise ValueError("글 작성은 하루에 한 번만 가능합니다.")
+
+    with conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO sns_posts (user_id, bot_id, title, content, is_anonymous)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO sns_posts (user_id, bot_id, category, title, content, is_anonymous)
+            VALUES (%s, %s, %s, %s, %s, %s)
             RETURNING id,
                       user_id,
                       bot_id,
+                      category,
                       title,
                       content,
                       is_anonymous,
                       created_at,
                       updated_at
             """,
-            (user_id, bot_id, title, content, is_anonymous),
+            (user_id, bot_id, category, title, content, is_anonymous),
         )
         row = cur.fetchone()
         conn.commit()
@@ -103,7 +139,7 @@ def update_post(
     if not is_post_owner(conn, post_id, user_id):
         return None
 
-    allowed_keys = {"title", "content", "is_anonymous", "bot_id"}
+    allowed_keys = {"category", "title", "content", "is_anonymous", "bot_id"}
     updates = {key: value for key, value in payload.items() if key in allowed_keys and value is not None}
 
     if "bot_id" in updates:
@@ -129,6 +165,7 @@ def update_post(
             RETURNING id,
                       user_id,
                       bot_id,
+                      category,
                       title,
                       content,
                       is_anonymous,
@@ -154,8 +191,17 @@ def list_comments(conn: psycopg.Connection, post_id: int) -> list[dict]:
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT c.id, c.post_id, c.user_id, c.content, c.created_at, c.updated_at
+            SELECT c.id,
+                   c.post_id,
+                   c.user_id,
+                   c.bot_id,
+                   c.parent_comment_id,
+                   b.name AS bot_name,
+                   c.content,
+                   c.created_at,
+                   c.updated_at
             FROM sns_comments c
+            LEFT JOIN bots b ON b.id = c.bot_id
             WHERE c.post_id = %s
             ORDER BY c.created_at ASC
             """,
@@ -164,18 +210,38 @@ def list_comments(conn: psycopg.Connection, post_id: int) -> list[dict]:
         return list(cur.fetchall())
 
 
-def create_comment(conn: psycopg.Connection, post_id: int, user_id: int, content: str) -> dict:
+def create_comment(
+    conn: psycopg.Connection,
+    post_id: int,
+    user_id: int,
+    content: str,
+    bot_id: int | None = None,
+    parent_comment_id: int | None = None,
+) -> dict:
     if not get_post_by_id(conn, post_id):
         raise ValueError("게시글을 찾을 수 없습니다.")
 
     with conn.cursor() as cur:
+        if bot_id is not None:
+            cur.execute("SELECT id FROM bots WHERE id = %s AND user_id = %s", (bot_id, user_id))
+            if not cur.fetchone():
+                raise ValueError("유효하지 않은 봇입니다.")
+
+        if parent_comment_id is not None:
+            cur.execute(
+                "SELECT id FROM sns_comments WHERE id = %s AND post_id = %s",
+                (parent_comment_id, post_id),
+            )
+            if not cur.fetchone():
+                raise ValueError("대댓글 대상 댓글을 찾을 수 없습니다.")
+
         cur.execute(
             """
-            INSERT INTO sns_comments (post_id, user_id, content)
-            VALUES (%s, %s, %s)
-            RETURNING id, post_id, user_id, content, created_at, updated_at
+            INSERT INTO sns_comments (post_id, user_id, bot_id, parent_comment_id, content)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id, post_id, user_id, bot_id, parent_comment_id, content, created_at, updated_at
             """,
-            (post_id, user_id, content),
+            (post_id, user_id, bot_id, parent_comment_id, content),
         )
         row = cur.fetchone()
         conn.commit()
@@ -190,7 +256,7 @@ def update_comment(conn: psycopg.Connection, comment_id: int, user_id: int, cont
             SET content = %s,
                 updated_at = NOW()
             WHERE id = %s AND user_id = %s
-            RETURNING id, post_id, user_id, content, created_at, updated_at
+            RETURNING id, post_id, user_id, bot_id, parent_comment_id, content, created_at, updated_at
             """,
             (content, comment_id, user_id),
         )
