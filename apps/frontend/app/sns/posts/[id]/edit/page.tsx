@@ -13,13 +13,13 @@ export default function SnsPostEditPage() {
   const token = useAppStore((s) => s.accessToken);
   const hydrate = useAppStore((s) => s.hydrate);
 
+  const [category, setCategory] = useState<'경제' | '문화' | '연예' | '유머'>('경제');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(true);
   const [botId, setBotId] = useState<string>('');
   const [bots, setBots] = useState<Bot[]>([]);
   const [comments, setComments] = useState<SnsComment[]>([]);
-  const [newComment, setNewComment] = useState('');
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
   const [editingCommentText, setEditingCommentText] = useState('');
   const [error, setError] = useState('');
@@ -47,6 +47,7 @@ export default function SnsPostEditPage() {
         router.replace(`/sns/posts/${params.id}`);
         return;
       }
+      setCategory(res.data.category);
       setTitle(res.data.title);
       setContent(res.data.content);
       setIsAnonymous(res.data.is_anonymous);
@@ -66,7 +67,7 @@ export default function SnsPostEditPage() {
     try {
       await apiClient.patch(
         `/sns/posts/${params.id}`,
-        { title, content, is_anonymous: isAnonymous, bot_id: botId ? Number(botId) : null },
+        { category, title, content, is_anonymous: isAnonymous, bot_id: botId ? Number(botId) : null },
         { headers: authHeader(token) }
       );
       router.push('/sns/posts');
@@ -86,22 +87,6 @@ export default function SnsPostEditPage() {
       router.push('/sns/posts');
     } catch {
       setError('게시글 삭제에 실패했습니다.');
-    }
-  };
-
-  const addComment = async () => {
-    if (!token || !newComment.trim()) return;
-
-    try {
-      await apiClient.post(
-        `/sns/posts/${params.id}/comments`,
-        { content: newComment.trim() },
-        { headers: authHeader(token) }
-      );
-      setNewComment('');
-      loadComments();
-    } catch {
-      setError('댓글 등록에 실패했습니다.');
     }
   };
 
@@ -148,6 +133,12 @@ export default function SnsPostEditPage() {
 
       <section className="rounded-xl border border-border bg-card p-4">
         <div className="grid gap-3">
+          <select className="rounded-lg border border-border bg-transparent p-2" value={category} onChange={(e) => setCategory(e.target.value as '경제' | '문화' | '연예' | '유머')}>
+            <option value="경제">경제</option>
+            <option value="문화">문화</option>
+            <option value="연예">연예</option>
+            <option value="유머">유머</option>
+          </select>
           <input className="rounded-lg border border-border bg-transparent p-2" placeholder="제목" value={title} onChange={(e) => setTitle(e.target.value)} />
           <textarea className="min-h-40 rounded-lg border border-border bg-transparent p-2" placeholder="내용" value={content} onChange={(e) => setContent(e.target.value)} />
           <select className="rounded-lg border border-border bg-transparent p-2" value={botId} onChange={(e) => setBotId(e.target.value)}>
@@ -171,15 +162,7 @@ export default function SnsPostEditPage() {
       <section className="mt-4 rounded-xl border border-border bg-card p-4">
         <h2 className="mb-3 font-medium">댓글</h2>
 
-        <div className="mb-3 flex gap-2">
-          <input
-            className="flex-1 rounded-lg border border-border bg-transparent p-2"
-            placeholder="댓글을 입력하세요"
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-          />
-          <button className="whitespace-nowrap rounded-lg bg-primary px-3 py-2 text-white" onClick={addComment}>등록</button>
-        </div>
+        <p className="mb-3 text-xs text-fg/70">수정 화면에서는 댓글 신규 작성이 비활성화됩니다. 댓글 등록은 상세 화면에서 가능합니다.</p>
 
         <ul className="space-y-2">
           {comments.map((comment) => (

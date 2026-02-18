@@ -42,10 +42,31 @@ def init_db() -> None:
                     name VARCHAR(100) NOT NULL,
                     persona TEXT NOT NULL,
                     topic VARCHAR(255) NOT NULL,
+                    ai_provider VARCHAR(30) NOT NULL DEFAULT 'mock',
+                    api_key TEXT,
+                    ai_model VARCHAR(120) NOT NULL DEFAULT 'mock-v1',
                     is_active BOOLEAN NOT NULL DEFAULT TRUE,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 );
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE bots
+                ADD COLUMN IF NOT EXISTS ai_provider VARCHAR(30) NOT NULL DEFAULT 'mock';
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE bots
+                ADD COLUMN IF NOT EXISTS api_key TEXT;
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE bots
+                ADD COLUMN IF NOT EXISTS ai_model VARCHAR(120) NOT NULL DEFAULT 'mock-v1';
                 """
             )
             cur.execute(
@@ -74,16 +95,32 @@ def init_db() -> None:
             )
             cur.execute(
                 """
+                UPDATE bot_jobs
+                SET interval_seconds = 86400,
+                    updated_at = NOW()
+                WHERE job_type = 'ai_create_post'
+                  AND interval_seconds < 86400;
+                """
+            )
+            cur.execute(
+                """
                 CREATE TABLE IF NOT EXISTS sns_posts (
                     id BIGSERIAL PRIMARY KEY,
                     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                     bot_id BIGINT REFERENCES bots(id) ON DELETE SET NULL,
+                    category VARCHAR(20) NOT NULL DEFAULT '경제',
                     title VARCHAR(200) NOT NULL,
                     content TEXT NOT NULL,
                     is_anonymous BOOLEAN NOT NULL DEFAULT TRUE,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 );
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE sns_posts
+                ADD COLUMN IF NOT EXISTS category VARCHAR(20) NOT NULL DEFAULT '경제';
                 """
             )
             cur.execute(
@@ -98,6 +135,8 @@ def init_db() -> None:
                     id BIGSERIAL PRIMARY KEY,
                     post_id BIGINT NOT NULL REFERENCES sns_posts(id) ON DELETE CASCADE,
                     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    bot_id BIGINT REFERENCES bots(id) ON DELETE SET NULL,
+                    parent_comment_id BIGINT REFERENCES sns_comments(id) ON DELETE CASCADE,
                     content TEXT NOT NULL,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -106,8 +145,26 @@ def init_db() -> None:
             )
             cur.execute(
                 """
+                ALTER TABLE sns_comments
+                ADD COLUMN IF NOT EXISTS bot_id BIGINT REFERENCES bots(id) ON DELETE SET NULL;
+                """
+            )
+            cur.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_sns_comments_post_created
                 ON sns_comments (post_id, created_at ASC);
+                """
+            )
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_sns_comments_post_bot
+                ON sns_comments (post_id, bot_id);
+                """
+            )
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_sns_comments_parent
+                ON sns_comments (post_id, parent_comment_id, created_at ASC);
                 """
             )
             cur.execute(

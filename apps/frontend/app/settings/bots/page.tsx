@@ -3,8 +3,10 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
-import { Bot, apiClient, authHeader } from '../../../lib/api';
+import { AIModelListResponse, Bot, apiClient, authHeader } from '../../../lib/api';
 import { useAppStore } from '../../../stores/app-store';
+
+type AIProvider = 'mock' | 'gpt' | 'gemini' | 'claude';
 
 export default function BotSettingsPage() {
   const token = useAppStore((s) => s.accessToken);
@@ -14,20 +16,34 @@ export default function BotSettingsPage() {
   const [name, setName] = useState('');
   const [persona, setPersona] = useState('친근한 PM');
   const [topic, setTopic] = useState('AI 자동화');
+  const [aiProvider, setAiProvider] = useState<AIProvider>('gpt');
+  const [apiKey, setApiKey] = useState('');
+  const [models, setModels] = useState<string[]>([]);
+  const [aiModel, setAiModel] = useState('');
+  const [modelLoading, setModelLoading] = useState(false);
   const [error, setError] = useState('');
+  const resolveToken = () => {
+    if (token) return token;
+    if (typeof window !== 'undefined') {
+      return window.localStorage.getItem('hams_access_token') ?? '';
+    }
+    return '';
+  };
+
 
   useEffect(() => {
     hydrate();
   }, [hydrate]);
 
   const loadBots = async () => {
-    if (!token) {
+    const accessToken = resolveToken();
+    if (!accessToken) {
       setError('로그인이 필요합니다.');
       return;
     }
 
     try {
-      const res = await apiClient.get<Bot[]>('/bots', { headers: authHeader(token) });
+      const res = await apiClient.get<Bot[]>('/bots', { headers: authHeader(accessToken) });
       setBots(res.data);
       setError('');
     } catch {
@@ -41,11 +57,66 @@ export default function BotSettingsPage() {
     }
   }, [token]);
 
-  const createBot = async () => {
-    if (!token || !name.trim()) return;
+  const fetchModels = async () => {
+    const accessToken = resolveToken();
+    if (!accessToken) {
+      setError('로그인이 필요합니다.');
+      return;
+    }
+    if (!apiKey.trim()) {
+      setError('API Key를 먼저 입력해주세요.');
+      return;
+    }
+
+    setModelLoading(true);
     try {
-      await apiClient.post('/bots', { name, persona, topic }, { headers: authHeader(token) });
+      const res = await apiClient.post<AIModelListResponse>(
+        '/ai/models',
+        { ai_provider: aiProvider, api_key: apiKey.trim() },
+        { headers: authHeader(accessToken) }
+      );
+      setModels(res.data.models);
+      setAiModel(res.data.models[0] ?? '');
+      setError('');
+    } catch (err: any) {
+      setModels([]);
+      setAiModel('');
+      const message = err?.response?.data?.detail ?? '모델 조회 실패';
+      setError(String(message));
+    } finally {
+      setModelLoading(false);
+    }
+  };
+
+  const createBot = async () => {
+    const accessToken = resolveToken();
+    if (!accessToken || !name.trim()) return;
+    if (!apiKey.trim()) {
+      setError('API Key를 입력해주세요.');
+      return;
+    }
+    if (!aiModel) {
+      setError('모델 조회 후 모델을 선택해주세요.');
+      return;
+    }
+
+    try {
+      await apiClient.post(
+        '/bots',
+        {
+          name,
+          persona,
+          topic,
+          ai_provider: aiProvider,
+          api_key: apiKey.trim(),
+          ai_model: aiModel,
+        },
+        { headers: authHeader(accessToken) }
+      );
       setName('');
+      setApiKey('');
+      setModels([]);
+      setAiModel('');
       loadBots();
     } catch {
       setError('봇 등록 실패');
@@ -53,14 +124,16 @@ export default function BotSettingsPage() {
   };
 
   const toggleBot = async (bot: Bot) => {
-    if (!token) return;
-    await apiClient.patch(`/bots/${bot.id}`, { is_active: !bot.is_active }, { headers: authHeader(token) });
+    const accessToken = resolveToken();
+    if (!accessToken) return;
+    await apiClient.patch(`/bots/${bot.id}`, { is_active: !bot.is_active }, { headers: authHeader(accessToken) });
     loadBots();
   };
 
   const deleteBot = async (botId: number) => {
-    if (!token) return;
-    await apiClient.delete(`/bots/${botId}`, { headers: authHeader(token) });
+    const accessToken = resolveToken();
+    if (!accessToken) return;
+    await apiClient.delete(`/bots/${botId}`, { headers: authHeader(accessToken) });
     loadBots();
   };
 
@@ -78,7 +151,39 @@ export default function BotSettingsPage() {
           <input className="rounded-lg border border-border bg-transparent p-2" placeholder="페르소나" value={persona} onChange={(e) => setPersona(e.target.value)} />
           <input className="rounded-lg border border-border bg-transparent p-2" placeholder="토픽" value={topic} onChange={(e) => setTopic(e.target.value)} />
         </div>
-        <button className="mt-2 rounded-lg bg-primary px-3 py-2 text-white" onClick={createBot}>봇 등록</button>
+
+        <div className="mt-2 grid gap-2 md:grid-cols-3">
+          <select className="rounded-lg border border-border bg-transparent p-2" value={aiProvider} onChange={(e) => setAiProvider(e.target.value as AIProvider)}>
+            <option value="gpt">gpt</option>
+            <option value="gemini">gemini</option>
+            <option value="claude">claude</option>
+            <option value="mock">mock</option>
+          </select>
+          <input
+            className="rounded-lg border border-border bg-transparent p-2"
+            placeholder="API Key"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+          />
+          <button className="rounded-lg border border-border px-3 py-2" onClick={fetchModels} disabled={modelLoading}>
+            {modelLoading ? '조회 중...' : '모델 조회'}
+          </button>
+        </div>
+
+        <div className="mt-2 grid gap-2 md:grid-cols-2">
+          <select
+            className="rounded-lg border border-border bg-transparent p-2"
+            value={aiModel}
+            onChange={(e) => setAiModel(e.target.value)}
+          >
+            <option value="">모델 선택</option>
+            {models.map((model) => (
+              <option key={model} value={model}>{model}</option>
+            ))}
+          </select>
+          <button className="rounded-lg bg-primary px-3 py-2 text-white" onClick={createBot}>봇 등록</button>
+        </div>
+
         {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
       </section>
 
@@ -94,6 +199,7 @@ export default function BotSettingsPage() {
                 <div>
                   <p className="font-medium">{bot.name}</p>
                   <p className="text-xs text-fg/70">{bot.persona} · {bot.topic}</p>
+                  <p className="text-xs text-fg/70">AI: {bot.ai_provider} · Model: {bot.ai_model} · Key: {bot.has_api_key ? '연결됨' : '없음'}</p>
                   <p className="text-xs">상태: {bot.is_active ? '활성' : '비활성'}</p>
                 </div>
                 <div className="flex gap-2">
