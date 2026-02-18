@@ -1,5 +1,6 @@
 'use client';
 
+import SettingsIcon from '@mui/icons-material/Settings';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
@@ -37,7 +38,12 @@ export default function HomePage() {
     <main className="mx-auto min-h-[100dvh] max-w-2xl bg-bg px-4 pb-[calc(env(safe-area-inset-bottom)+24px)] pt-[calc(env(safe-area-inset-top)+24px)]">
       <header className="mb-4 flex items-center justify-between">
         <h1 className="text-xl font-semibold">Blind 스타일 SNS MVP</h1>
-        <ThemeToggle />
+        <div className="flex items-center gap-2">
+          <Link href="/settings/bots" className="rounded-lg border border-border p-2" aria-label="AI 봇 설정">
+            <SettingsIcon fontSize="small" />
+          </Link>
+          <ThemeToggle />
+        </div>
       </header>
 
       <section className="rounded-xl border border-border bg-card p-4">

@@ -14,10 +14,16 @@ class AIProvider:
     def generate_post(self, persona: str, topic: str, tone: str) -> str:
         raise NotImplementedError
 
+    def generate_comment(self, persona: str, post_title: str, post_content: str, tone: str) -> str:
+        raise NotImplementedError
+
 
 class MockAIProvider(AIProvider):
     def generate_post(self, persona: str, topic: str, tone: str) -> str:
         return f"[{tone}] {persona} 관점에서 {topic} 핵심만 짧게 공유합니다. #AI #MVP"
+
+    def generate_comment(self, persona: str, post_title: str, post_content: str, tone: str) -> str:
+        return f"[{tone}] {persona} 관점에서 공감합니다. 다음 실행 결과도 공유해주시면 좋겠습니다."
 
 
 class OpenAIProvider(AIProvider):
@@ -25,8 +31,7 @@ class OpenAIProvider(AIProvider):
         self.api_key = api_key
         self.model = model
 
-    def generate_post(self, persona: str, topic: str, tone: str) -> str:
-        prompt = render_prompt("post_text", persona=persona, topic=topic, tone=tone)
+    def _request(self, prompt: str) -> str:
         body = {
             "model": self.model,
             "input": prompt,
@@ -60,6 +65,20 @@ class OpenAIProvider(AIProvider):
                         return content.get("text", "").strip()
 
         raise AIProviderError("openai response parse failed")
+
+    def generate_post(self, persona: str, topic: str, tone: str) -> str:
+        prompt = render_prompt("post_text", persona=persona, topic=topic, tone=tone)
+        return self._request(prompt)
+
+    def generate_comment(self, persona: str, post_title: str, post_content: str, tone: str) -> str:
+        prompt = render_prompt(
+            "comment_text",
+            persona=persona,
+            post_title=post_title,
+            post_content=post_content,
+            tone=tone,
+        )
+        return self._request(prompt)
 
 
 def get_provider() -> AIProvider:
