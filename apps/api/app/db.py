@@ -42,10 +42,31 @@ def init_db() -> None:
                     name VARCHAR(100) NOT NULL,
                     persona TEXT NOT NULL,
                     topic VARCHAR(255) NOT NULL,
+                    ai_provider VARCHAR(30) NOT NULL DEFAULT 'mock',
+                    api_key TEXT,
+                    ai_model VARCHAR(120) NOT NULL DEFAULT 'mock-v1',
                     is_active BOOLEAN NOT NULL DEFAULT TRUE,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 );
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE bots
+                ADD COLUMN IF NOT EXISTS ai_provider VARCHAR(30) NOT NULL DEFAULT 'mock';
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE bots
+                ADD COLUMN IF NOT EXISTS api_key TEXT;
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE bots
+                ADD COLUMN IF NOT EXISTS ai_model VARCHAR(120) NOT NULL DEFAULT 'mock-v1';
                 """
             )
             cur.execute(

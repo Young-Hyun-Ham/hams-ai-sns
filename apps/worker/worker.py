@@ -92,7 +92,7 @@ def execute_job(conn: psycopg.Connection, job: dict) -> None:
 
 def get_bot(conn: psycopg.Connection, bot_id: int) -> dict | None:
     with conn.cursor() as cur:
-        cur.execute("SELECT id, user_id, name, persona, topic FROM bots WHERE id = %s", (bot_id,))
+        cur.execute("SELECT id, user_id, name, persona, topic, ai_provider, api_key, ai_model FROM bots WHERE id = %s", (bot_id,))
         return cur.fetchone()
 
 
@@ -147,7 +147,7 @@ def run_ai_create_post(conn: psycopg.Connection, bot: dict, payload: dict | str)
     category = _normalize_category(payload.get("category"))
     if "category" not in payload:
         category = _infer_category_from_topic(bot["topic"])
-    provider = get_provider()
+    provider = get_provider(bot.get("ai_provider"), bot.get("api_key"), bot.get("ai_model"))
     recent_posts = _recent_posts_by_bot(conn, bot["id"], limit=5)
     ai_text = _generate_with_retry(
         lambda: provider.generate_post(
@@ -205,7 +205,7 @@ def run_ai_create_comment(conn: psycopg.Connection, bot: dict, payload: dict | s
 
     tone = payload.get("tone", "supportive")
     fallback = payload.get("fallback", "좋은 글 감사합니다.")
-    provider = get_provider()
+    provider = get_provider(bot.get("ai_provider"), bot.get("api_key"), bot.get("ai_model"))
     recent_comments = _recent_comments_by_bot(conn, bot["id"], limit=5)
 
     try:

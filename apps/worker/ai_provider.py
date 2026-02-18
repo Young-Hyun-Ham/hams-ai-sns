@@ -3,6 +3,7 @@ import json
 import os
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from prompt_templates import render_prompt
@@ -167,23 +168,9 @@ class OpenAIProvider(AIProvider):
 
         raise AIProviderError("openai response parse failed")
 
-    def generate_post(
-        self,
-        persona: str,
-        topic: str,
-        category: str,
-        tone: str,
-        recent_posts: list[str] | None = None,
-    ) -> str:
+    def generate_post(self, persona: str, topic: str, category: str, tone: str, recent_posts: list[str] | None = None) -> str:
         recent = "\n".join(f"- {p}" for p in (recent_posts or [])[-5:]) or "- 없음"
-        prompt = render_prompt(
-            "post_text",
-            persona=persona,
-            topic=topic,
-            category=category,
-            tone=tone,
-            recent_posts=recent,
-        )
+        prompt = render_prompt("post_text", persona=persona, topic=topic, category=category, tone=tone, recent_posts=recent)
         return self._request(prompt)
 
     def generate_comment(
@@ -208,14 +195,142 @@ class OpenAIProvider(AIProvider):
         return self._request(prompt)
 
 
-def get_provider() -> AIProvider:
-    provider = os.getenv("AI_PROVIDER", "mock").lower()
+class GeminiProvider(AIProvider):
+    def __init__(self, api_key: str, model: str) -> None:
+        self.api_key = api_key
+        self.model = model
 
-    if provider == "openai":
-        api_key = os.getenv("OPENAI_API_KEY", "")
-        model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-        if not api_key:
-            raise AIProviderError("OPENAI_API_KEY is required when AI_PROVIDER=openai")
-        return OpenAIProvider(api_key=api_key, model=model)
+    def _request(self, prompt: str) -> str:
+        body = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.9, "maxOutputTokens": 220},
+        }
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{urllib.parse.quote(self.model)}:generateContent?key={urllib.parse.quote(self.api_key)}"
+        req = urllib.request.Request(url=url, method="POST", data=json.dumps(body).encode("utf-8"), headers={"Content-Type": "application/json"})
+
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.URLError as exc:
+            raise AIProviderError(f"gemini request failed: {exc}") from exc
+
+        candidates = payload.get("candidates", [])
+        if candidates:
+            parts = candidates[0].get("content", {}).get("parts", [])
+            texts = [part.get("text", "") for part in parts if isinstance(part, dict)]
+            text = "".join(texts).strip()
+            if text:
+                return text
+        raise AIProviderError("gemini response parse failed")
+
+    def generate_post(self, persona: str, topic: str, category: str, tone: str, recent_posts: list[str] | None = None) -> str:
+        recent = "\n".join(f"- {p}" for p in (recent_posts or [])[-5:]) or "- 없음"
+        prompt = render_prompt("post_text", persona=persona, topic=topic, category=category, tone=tone, recent_posts=recent)
+        return self._request(prompt)
+
+    def generate_comment(
+        self,
+        persona: str,
+        post_title: str,
+        post_category: str,
+        post_content: str,
+        tone: str,
+        recent_comments: list[str] | None = None,
+    ) -> str:
+        recent = "\n".join(f"- {c}" for c in (recent_comments or [])[-5:]) or "- 없음"
+        prompt = render_prompt(
+            "comment_text",
+            persona=persona,
+            post_title=post_title,
+            post_category=post_category,
+            post_content=post_content,
+            tone=tone,
+            recent_comments=recent,
+        )
+        return self._request(prompt)
+
+
+class ClaudeProvider(AIProvider):
+    def __init__(self, api_key: str, model: str) -> None:
+        self.api_key = api_key
+        self.model = model
+
+    def _request(self, prompt: str) -> str:
+        body = {
+            "model": self.model,
+            "max_tokens": 220,
+            "temperature": 0.9,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        req = urllib.request.Request(
+            url="https://api.anthropic.com/v1/messages",
+            method="POST",
+            data=json.dumps(body).encode("utf-8"),
+            headers={
+                "x-api-key": self.api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.URLError as exc:
+            raise AIProviderError(f"claude request failed: {exc}") from exc
+
+        for item in payload.get("content", []):
+            if item.get("type") == "text":
+                text = item.get("text", "").strip()
+                if text:
+                    return text
+        raise AIProviderError("claude response parse failed")
+
+    def generate_post(self, persona: str, topic: str, category: str, tone: str, recent_posts: list[str] | None = None) -> str:
+        recent = "\n".join(f"- {p}" for p in (recent_posts or [])[-5:]) or "- 없음"
+        prompt = render_prompt("post_text", persona=persona, topic=topic, category=category, tone=tone, recent_posts=recent)
+        return self._request(prompt)
+
+    def generate_comment(
+        self,
+        persona: str,
+        post_title: str,
+        post_category: str,
+        post_content: str,
+        tone: str,
+        recent_comments: list[str] | None = None,
+    ) -> str:
+        recent = "\n".join(f"- {c}" for c in (recent_comments or [])[-5:]) or "- 없음"
+        prompt = render_prompt(
+            "comment_text",
+            persona=persona,
+            post_title=post_title,
+            post_category=post_category,
+            post_content=post_content,
+            tone=tone,
+            recent_comments=recent,
+        )
+        return self._request(prompt)
+
+
+def get_provider(provider_name: str | None = None, api_key: str | None = None, model: str | None = None) -> AIProvider:
+    provider = (provider_name or os.getenv("AI_PROVIDER", "mock")).lower()
+    selected_model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    selected_key = (api_key or os.getenv("OPENAI_API_KEY", "")).strip()
+
+    if provider in {"gpt", "openai"}:
+        if not selected_key:
+            raise AIProviderError("OPENAI API Key가 필요합니다.")
+        return OpenAIProvider(api_key=selected_key, model=selected_model)
+
+    if provider == "gemini":
+        if not selected_key:
+            raise AIProviderError("Gemini API Key가 필요합니다.")
+        return GeminiProvider(api_key=selected_key, model=selected_model)
+
+    if provider == "claude":
+        if not selected_key:
+            raise AIProviderError("Claude API Key가 필요합니다.")
+        return ClaudeProvider(api_key=selected_key, model=selected_model)
 
     return MockAIProvider()

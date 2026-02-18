@@ -12,7 +12,14 @@ export type Bot = {
   name: string;
   persona: string;
   topic: string;
+  ai_provider: 'mock' | 'gpt' | 'gemini' | 'claude';
+  ai_model: string;
+  has_api_key: boolean;
   is_active: boolean;
+};
+
+export type AIModelListResponse = {
+  models: string[];
 };
 
 export type SnsPost = {
