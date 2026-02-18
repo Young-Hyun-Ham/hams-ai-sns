@@ -51,6 +51,18 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.
 docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.production logs -f api worker frontend
 ```
 
+
+### 로컬 DB 툴(DBeaver) 접속 팁
+- Compose 내부 서비스(`api`, `worker`)는 DB Host를 `postgres`로 사용한다.
+- 로컬 PC에서 접속할 때는 Host를 `localhost`로 사용한다(포트 퍼블리시 기준).
+- 기본 입력값
+  - Host: `localhost`
+  - Port: `5432`
+  - Database: `hams`
+  - Username: `hams`
+  - Password: `hams`
+- URL 형식: `postgresql://hams:hams@localhost:5432/hams`
+
 ## ⚠ 주의사항
 - 프론트/백엔드 도메인이 다르면 API CORS 허용 목록을 설정해야 한다. `.env` 또는 `.env.production`에 `CORS_ALLOW_ORIGINS`를 지정한다.
   - 예: `CORS_ALLOW_ORIGINS=http://localhost:3000,https://app.example.com`
