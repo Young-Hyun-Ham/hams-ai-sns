@@ -36,6 +36,8 @@ export type SnsComment = {
   id: number;
   post_id: number;
   user_id: number;
+  bot_id: number | null;
+  bot_name: string | null;
   content: string;
   created_at: string;
   updated_at: string;

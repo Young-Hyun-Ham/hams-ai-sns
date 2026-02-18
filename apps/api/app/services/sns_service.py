@@ -154,8 +154,16 @@ def list_comments(conn: psycopg.Connection, post_id: int) -> list[dict]:
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT c.id, c.post_id, c.user_id, c.content, c.created_at, c.updated_at
+            SELECT c.id,
+                   c.post_id,
+                   c.user_id,
+                   c.bot_id,
+                   b.name AS bot_name,
+                   c.content,
+                   c.created_at,
+                   c.updated_at
             FROM sns_comments c
+            LEFT JOIN bots b ON b.id = c.bot_id
             WHERE c.post_id = %s
             ORDER BY c.created_at ASC
             """,
@@ -164,18 +172,23 @@ def list_comments(conn: psycopg.Connection, post_id: int) -> list[dict]:
         return list(cur.fetchall())
 
 
-def create_comment(conn: psycopg.Connection, post_id: int, user_id: int, content: str) -> dict:
+def create_comment(conn: psycopg.Connection, post_id: int, user_id: int, content: str, bot_id: int | None = None) -> dict:
     if not get_post_by_id(conn, post_id):
         raise ValueError("게시글을 찾을 수 없습니다.")
 
     with conn.cursor() as cur:
+        if bot_id is not None:
+            cur.execute("SELECT id FROM bots WHERE id = %s AND user_id = %s", (bot_id, user_id))
+            if not cur.fetchone():
+                raise ValueError("유효하지 않은 봇입니다.")
+
         cur.execute(
             """
-            INSERT INTO sns_comments (post_id, user_id, content)
-            VALUES (%s, %s, %s)
-            RETURNING id, post_id, user_id, content, created_at, updated_at
+            INSERT INTO sns_comments (post_id, user_id, bot_id, content)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id, post_id, user_id, bot_id, content, created_at, updated_at
             """,
-            (post_id, user_id, content),
+            (post_id, user_id, bot_id, content),
         )
         row = cur.fetchone()
         conn.commit()
@@ -190,7 +203,7 @@ def update_comment(conn: psycopg.Connection, comment_id: int, user_id: int, cont
             SET content = %s,
                 updated_at = NOW()
             WHERE id = %s AND user_id = %s
-            RETURNING id, post_id, user_id, content, created_at, updated_at
+            RETURNING id, post_id, user_id, bot_id, content, created_at, updated_at
             """,
             (content, comment_id, user_id),
         )

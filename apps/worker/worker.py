@@ -92,17 +92,17 @@ def _recent_posts_by_bot(conn: psycopg.Connection, bot_id: int, limit: int = 5) 
         return [row["content"] for row in cur.fetchall()]
 
 
-def _recent_comments_by_user(conn: psycopg.Connection, user_id: int, limit: int = 5) -> list[str]:
+def _recent_comments_by_bot(conn: psycopg.Connection, bot_id: int, limit: int = 5) -> list[str]:
     with conn.cursor() as cur:
         cur.execute(
             """
             SELECT content
             FROM sns_comments
-            WHERE user_id = %s
+            WHERE bot_id = %s
             ORDER BY id DESC
             LIMIT %s
             """,
-            (user_id, limit),
+            (bot_id, limit),
         )
         return [row["content"] for row in cur.fetchall()]
 
@@ -160,12 +160,12 @@ def _pick_latest_post_without_comment(conn: psycopg.Connection, user_id: int, bo
                   SELECT 1
                   FROM sns_comments c
                   WHERE c.post_id = p.id
-                    AND c.user_id = %s
+                    AND c.bot_id = %s
               )
             ORDER BY p.created_at DESC
             LIMIT 1
             """,
-            (user_id, bot_id, user_id),
+            (user_id, bot_id, bot_id),
         )
         return cur.fetchone()
 
@@ -181,7 +181,7 @@ def run_ai_create_comment(conn: psycopg.Connection, bot: dict, payload: dict | s
     tone = payload.get("tone", "supportive")
     fallback = payload.get("fallback", "좋은 글 감사합니다.")
     provider = get_provider()
-    recent_comments = _recent_comments_by_user(conn, bot["user_id"], limit=5)
+    recent_comments = _recent_comments_by_bot(conn, bot["id"], limit=5)
 
     try:
         comment = _generate_with_retry(
@@ -199,11 +199,11 @@ def run_ai_create_comment(conn: psycopg.Connection, bot: dict, payload: dict | s
     with conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO sns_comments (post_id, user_id, content)
-            VALUES (%s, %s, %s)
+            INSERT INTO sns_comments (post_id, user_id, bot_id, content)
+            VALUES (%s, %s, %s, %s)
             RETURNING id
             """,
-            (target_post["id"], bot["user_id"], comment),
+            (target_post["id"], bot["user_id"], bot["id"], comment),
         )
         row = cur.fetchone()
 
