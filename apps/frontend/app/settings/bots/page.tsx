@@ -22,19 +22,28 @@ export default function BotSettingsPage() {
   const [aiModel, setAiModel] = useState('');
   const [modelLoading, setModelLoading] = useState(false);
   const [error, setError] = useState('');
+  const resolveToken = () => {
+    if (token) return token;
+    if (typeof window !== 'undefined') {
+      return window.localStorage.getItem('hams_access_token') ?? '';
+    }
+    return '';
+  };
+
 
   useEffect(() => {
     hydrate();
   }, [hydrate]);
 
   const loadBots = async () => {
-    if (!token) {
+    const accessToken = resolveToken();
+    if (!accessToken) {
       setError('로그인이 필요합니다.');
       return;
     }
 
     try {
-      const res = await apiClient.get<Bot[]>('/bots', { headers: authHeader(token) });
+      const res = await apiClient.get<Bot[]>('/bots', { headers: authHeader(accessToken) });
       setBots(res.data);
       setError('');
     } catch {
@@ -49,7 +58,11 @@ export default function BotSettingsPage() {
   }, [token]);
 
   const fetchModels = async () => {
-    if (!token) return;
+    const accessToken = resolveToken();
+    if (!accessToken) {
+      setError('로그인이 필요합니다.');
+      return;
+    }
     if (!apiKey.trim()) {
       setError('API Key를 먼저 입력해주세요.');
       return;
@@ -60,7 +73,7 @@ export default function BotSettingsPage() {
       const res = await apiClient.post<AIModelListResponse>(
         '/ai/models',
         { ai_provider: aiProvider, api_key: apiKey.trim() },
-        { headers: authHeader(token) }
+        { headers: authHeader(accessToken) }
       );
       setModels(res.data.models);
       setAiModel(res.data.models[0] ?? '');
@@ -76,7 +89,8 @@ export default function BotSettingsPage() {
   };
 
   const createBot = async () => {
-    if (!token || !name.trim()) return;
+    const accessToken = resolveToken();
+    if (!accessToken || !name.trim()) return;
     if (!apiKey.trim()) {
       setError('API Key를 입력해주세요.');
       return;
@@ -97,7 +111,7 @@ export default function BotSettingsPage() {
           api_key: apiKey.trim(),
           ai_model: aiModel,
         },
-        { headers: authHeader(token) }
+        { headers: authHeader(accessToken) }
       );
       setName('');
       setApiKey('');
@@ -110,14 +124,16 @@ export default function BotSettingsPage() {
   };
 
   const toggleBot = async (bot: Bot) => {
-    if (!token) return;
-    await apiClient.patch(`/bots/${bot.id}`, { is_active: !bot.is_active }, { headers: authHeader(token) });
+    const accessToken = resolveToken();
+    if (!accessToken) return;
+    await apiClient.patch(`/bots/${bot.id}`, { is_active: !bot.is_active }, { headers: authHeader(accessToken) });
     loadBots();
   };
 
   const deleteBot = async (botId: number) => {
-    if (!token) return;
-    await apiClient.delete(`/bots/${botId}`, { headers: authHeader(token) });
+    const accessToken = resolveToken();
+    if (!accessToken) return;
+    await apiClient.delete(`/bots/${botId}`, { headers: authHeader(accessToken) });
     loadBots();
   };
 

@@ -96,11 +96,7 @@ def get_bots(
 
 
 @app.post("/ai/models", response_model=AIModelListResponse)
-def get_ai_models(
-    payload: AIModelListRequest,
-    current_user: dict = Depends(get_current_user),
-) -> AIModelListResponse:
-    _ = current_user
+def get_ai_models(payload: AIModelListRequest) -> AIModelListResponse:
     try:
         models = ai_model_service.list_models(payload.ai_provider, payload.api_key)
     except ai_model_service.AIModelServiceError as exc:
