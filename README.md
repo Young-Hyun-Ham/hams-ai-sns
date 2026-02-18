@@ -16,6 +16,39 @@ docker compose up --build
 - email: `owner@hams.local`
 - password: `hams1234`
 
+
+## CORS 설정
+- 기본 허용 Origin: `http://localhost:3000`, `http://127.0.0.1:3000`
+- 필요 시 `.env`의 `CORS_ALLOW_ORIGINS`에 쉼표(,)로 Origin을 추가하세요.
+  - 예: `CORS_ALLOW_ORIGINS=http://localhost:3000,https://your-domain.com`
+
+
+## 로컬 PostgreSQL(DBeaver) 접속
+`DATABASE_URL=postgresql://${POSTGRES_USER:-hams}:${POSTGRES_PASSWORD:-hams}@postgres:5432/${POSTGRES_DB:-hams}` 에서
+`postgres`는 **도커 네트워크 내부 서비스명**입니다.
+
+호스트 PC에서 DBeaver로 접속할 때는 `docker-compose.yml`의 포트 매핑(`15432:5432`)을 통해 아래처럼 입력하세요.
+
+- Host: `localhost` (또는 `127.0.0.1`)
+- Port: `15432`
+- Database: `hams`
+- Username: `hams`
+- Password: `hams`
+
+직접 URL 입력 시:
+
+```
+postgresql://hams:hams@localhost:15432/hams
+```
+
+JDBC URL 사용 시:
+
+```
+jdbc:postgresql://localhost:15432/hams
+```
+
+현재 기본 설정이 이미 `15432:5432`이므로 로컬 PostgreSQL(5432)과 충돌을 피할 수 있습니다.
+
 ## 주요 API
 - `POST /auth/login`
 - `GET /auth/me`

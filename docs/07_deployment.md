@@ -8,6 +8,7 @@
 ## 🧱 구조 설명
 - `docker-compose.yml`
   - 기본(공통) 실행 스택 정의
+  - PostgreSQL 포트 매핑: `15432:5432` (로컬 DB와 충돌 최소화)
   - 서비스 재시작 정책 및 healthcheck 추가
 - `docker-compose.prod.yml`
   - 운영 전용 오버레이(프로덕션 env 파일, 포트 노출 최소화)
@@ -51,7 +52,22 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.
 docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.production logs -f api worker frontend
 ```
 
+
+### 로컬 DB 툴(DBeaver) 접속 팁
+- Compose 내부 서비스(`api`, `worker`)는 DB Host를 `postgres`로 사용한다.
+- 로컬 PC에서 접속할 때는 Host를 `localhost`로 사용한다(포트 퍼블리시 기준).
+- 기본 입력값
+  - Host: `localhost`
+  - Port: `15432`
+  - Database: `hams`
+  - Username: `hams`
+  - Password: `hams`
+- URL 형식: `postgresql://hams:hams@localhost:15432/hams`
+- JDBC URL: `jdbc:postgresql://localhost:15432/hams`
+
 ## ⚠ 주의사항
+- 프론트/백엔드 도메인이 다르면 API CORS 허용 목록을 설정해야 한다. `.env` 또는 `.env.production`에 `CORS_ALLOW_ORIGINS`를 지정한다.
+  - 예: `CORS_ALLOW_ORIGINS=http://localhost:3000,https://app.example.com`
 - 운영 환경에서는 `APP_SECRET_KEY`, `POSTGRES_PASSWORD`, `DEFAULT_USER_PASSWORD`를 반드시 강한 값으로 변경해야 한다.
 - 프로덕션은 `AI_PROVIDER=openai`를 권장하며 API 키 누출 방지를 위해 시크릿 관리 도구 사용을 권장한다.
 - 다중 인스턴스 확장 시 WebSocket 브로드캐스트는 Redis Pub/Sub 등 외부 브로커로 전환해야 한다.
