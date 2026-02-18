@@ -26,6 +26,9 @@ class AIProvider:
     ) -> str:
         raise NotImplementedError
 
+    def generate_comment(self, persona: str, post_title: str, post_content: str, tone: str) -> str:
+        raise NotImplementedError
+
 
 class MockAIProvider(AIProvider):
     def _seed(self, *parts: str) -> int:
@@ -109,6 +112,9 @@ class MockAIProvider(AIProvider):
         if text in recent_comments:
             text = f"{self._pick(reactions, seed, 2)} {self._pick(followups, seed, 3)}"
         return text
+
+    def generate_comment(self, persona: str, post_title: str, post_content: str, tone: str) -> str:
+        return f"[{tone}] {persona} 관점에서 공감합니다. 다음 실행 결과도 공유해주시면 좋겠습니다."
 
 
 class OpenAIProvider(AIProvider):
