@@ -16,6 +16,12 @@ docker compose up --build
 - email: `owner@hams.local`
 - password: `hams1234`
 
+
+## CORS 설정
+- 기본 허용 Origin: `http://localhost:3000`, `http://127.0.0.1:3000`
+- 필요 시 `.env`의 `CORS_ALLOW_ORIGINS`에 쉼표(,)로 Origin을 추가하세요.
+  - 예: `CORS_ALLOW_ORIGINS=http://localhost:3000,https://your-domain.com`
+
 ## 주요 API
 - `POST /auth/login`
 - `GET /auth/me`
