@@ -89,6 +89,7 @@ class SnsPostResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     comment_count: int
+    can_edit: bool = False
 
 
 class SnsCommentCreateRequest(BaseModel):
@@ -106,3 +107,4 @@ class SnsCommentResponse(BaseModel):
     content: str
     created_at: datetime
     updated_at: datetime
+    can_edit: bool = False

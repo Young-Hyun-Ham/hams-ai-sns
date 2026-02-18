@@ -43,6 +43,10 @@ export default function SnsPostEditPage() {
 
     const headers = { headers: authHeader(token) };
     apiClient.get<SnsPost>(`/sns/posts/${params.id}`, headers).then((res) => {
+      if (!res.data.can_edit) {
+        router.replace(`/sns/posts/${params.id}`);
+        return;
+      }
       setTitle(res.data.title);
       setContent(res.data.content);
       setIsAnonymous(res.data.is_anonymous);
@@ -102,6 +106,7 @@ export default function SnsPostEditPage() {
   };
 
   const startEditComment = (comment: SnsComment) => {
+    if (!comment.can_edit) return;
     setEditingCommentId(comment.id);
     setEditingCommentText(comment.content);
   };
@@ -173,7 +178,7 @@ export default function SnsPostEditPage() {
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
           />
-          <button className="rounded-lg bg-primary px-3 py-2 text-white" onClick={addComment}>등록</button>
+          <button className="whitespace-nowrap rounded-lg bg-primary px-3 py-2 text-white" onClick={addComment}>등록</button>
         </div>
 
         <ul className="space-y-2">
@@ -187,20 +192,22 @@ export default function SnsPostEditPage() {
                     onChange={(e) => setEditingCommentText(e.target.value)}
                   />
                   <div className="flex gap-2">
-                    <button className="rounded border border-border px-2 py-1" onClick={saveComment}>저장</button>
-                    <button className="rounded border border-border px-2 py-1" onClick={() => setEditingCommentId(null)}>취소</button>
+                    <button className="whitespace-nowrap rounded border border-border px-2 py-1" onClick={saveComment}>저장</button>
+                    <button className="whitespace-nowrap rounded border border-border px-2 py-1" onClick={() => setEditingCommentId(null)}>취소</button>
                   </div>
                 </div>
               ) : (
                 <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm">{comment.content}</p>
+                  <div className="min-w-0">
+                    <p className="text-sm break-words">{comment.content}</p>
                     <p className="text-xs text-fg/70">{new Date(comment.created_at).toLocaleString()}</p>
                   </div>
-                  <div className="flex gap-2 text-xs">
-                    <button className="rounded border border-border px-2 py-1" onClick={() => startEditComment(comment)}>수정</button>
-                    <button className="rounded border border-red-300 px-2 py-1 text-red-500" onClick={() => removeComment(comment.id)}>삭제</button>
-                  </div>
+                  {comment.can_edit && (
+                    <div className="flex shrink-0 gap-2 text-xs whitespace-nowrap">
+                      <button className="whitespace-nowrap rounded border border-border px-2 py-1" onClick={() => startEditComment(comment)}>수정</button>
+                      <button className="whitespace-nowrap rounded border border-red-300 px-2 py-1 text-red-500" onClick={() => removeComment(comment.id)}>삭제</button>
+                    </div>
+                  )}
                 </div>
               )}
             </li>

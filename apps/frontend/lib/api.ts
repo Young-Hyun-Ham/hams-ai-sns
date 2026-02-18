@@ -26,6 +26,7 @@ export type SnsPost = {
   created_at: string;
   updated_at: string;
   comment_count: number;
+  can_edit: boolean;
 };
 
 export const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` });
@@ -38,4 +39,5 @@ export type SnsComment = {
   content: string;
   created_at: string;
   updated_at: string;
+  can_edit: boolean;
 };

@@ -1,7 +1,7 @@
 import psycopg
 
 
-def list_posts(conn: psycopg.Connection, user_id: int) -> list[dict]:
+def list_public_posts(conn: psycopg.Connection) -> list[dict]:
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -21,15 +21,13 @@ def list_posts(conn: psycopg.Connection, user_id: int) -> list[dict]:
                    ) AS comment_count
             FROM sns_posts p
             LEFT JOIN bots b ON b.id = p.bot_id
-            WHERE p.user_id = %s
             ORDER BY p.created_at DESC
             """,
-            (user_id,),
         )
-        return cur.fetchall()
+        return list(cur.fetchall())
 
 
-def get_post(conn: psycopg.Connection, post_id: int, user_id: int) -> dict | None:
+def get_post_by_id(conn: psycopg.Connection, post_id: int) -> dict | None:
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -49,11 +47,17 @@ def get_post(conn: psycopg.Connection, post_id: int, user_id: int) -> dict | Non
                    ) AS comment_count
             FROM sns_posts p
             LEFT JOIN bots b ON b.id = p.bot_id
-            WHERE p.id = %s AND p.user_id = %s
+            WHERE p.id = %s
             """,
-            (post_id, user_id),
+            (post_id,),
         )
         return cur.fetchone()
+
+
+def is_post_owner(conn: psycopg.Connection, post_id: int, user_id: int) -> bool:
+    with conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM sns_posts WHERE id = %s AND user_id = %s", (post_id, user_id))
+        return cur.fetchone() is not None
 
 
 def create_post(
@@ -96,6 +100,9 @@ def update_post(
     user_id: int,
     payload: dict,
 ) -> dict | None:
+    if not is_post_owner(conn, post_id, user_id):
+        return None
+
     allowed_keys = {"title", "content", "is_anonymous", "bot_id"}
     updates = {key: value for key, value in payload.items() if key in allowed_keys and value is not None}
 
@@ -106,7 +113,7 @@ def update_post(
                 raise ValueError("유효하지 않은 봇입니다.")
 
     if not updates:
-        return get_post(conn, post_id, user_id)
+        return get_post_by_id(conn, post_id)
 
     fields = [f"{key} = %s" for key in updates]
     values = list(updates.values())
@@ -143,10 +150,7 @@ def delete_post(conn: psycopg.Connection, post_id: int, user_id: int) -> bool:
         return deleted
 
 
-def list_comments(conn: psycopg.Connection, post_id: int, user_id: int) -> list[dict]:
-    if not get_post(conn, post_id, user_id):
-        return []
-
+def list_comments(conn: psycopg.Connection, post_id: int) -> list[dict]:
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -157,11 +161,11 @@ def list_comments(conn: psycopg.Connection, post_id: int, user_id: int) -> list[
             """,
             (post_id,),
         )
-        return cur.fetchall()
+        return list(cur.fetchall())
 
 
 def create_comment(conn: psycopg.Connection, post_id: int, user_id: int, content: str) -> dict:
-    if not get_post(conn, post_id, user_id):
+    if not get_post_by_id(conn, post_id):
         raise ValueError("게시글을 찾을 수 없습니다.")
 
     with conn.cursor() as cur:
@@ -182,19 +186,13 @@ def update_comment(conn: psycopg.Connection, comment_id: int, user_id: int, cont
     with conn.cursor() as cur:
         cur.execute(
             """
-            UPDATE sns_comments c
+            UPDATE sns_comments
             SET content = %s,
                 updated_at = NOW()
-            WHERE c.id = %s
-              AND c.user_id = %s
-              AND EXISTS (
-                SELECT 1
-                FROM sns_posts p
-                WHERE p.id = c.post_id AND p.user_id = %s
-              )
-            RETURNING c.id, c.post_id, c.user_id, c.content, c.created_at, c.updated_at
+            WHERE id = %s AND user_id = %s
+            RETURNING id, post_id, user_id, content, created_at, updated_at
             """,
-            (content, comment_id, user_id, user_id),
+            (content, comment_id, user_id),
         )
         row = cur.fetchone()
         conn.commit()
@@ -205,16 +203,10 @@ def delete_comment(conn: psycopg.Connection, comment_id: int, user_id: int) -> b
     with conn.cursor() as cur:
         cur.execute(
             """
-            DELETE FROM sns_comments c
-            WHERE c.id = %s
-              AND c.user_id = %s
-              AND EXISTS (
-                SELECT 1
-                FROM sns_posts p
-                WHERE p.id = c.post_id AND p.user_id = %s
-              )
+            DELETE FROM sns_comments
+            WHERE id = %s AND user_id = %s
             """,
-            (comment_id, user_id, user_id),
+            (comment_id, user_id),
         )
         deleted = cur.rowcount > 0
         conn.commit()

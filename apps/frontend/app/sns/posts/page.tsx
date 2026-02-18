@@ -54,8 +54,10 @@ export default function SnsPostListPage() {
         {posts.map((post) => (
           <li key={post.id} className="rounded-xl border border-border bg-card p-4">
             <div className="mb-1 flex items-center justify-between gap-3">
-              <h2 className="font-medium">{post.title}</h2>
-              <Link className="text-sm text-primary underline" href={`/sns/posts/${post.id}/edit`}>수정/삭제</Link>
+              <Link className="font-medium text-primary underline" href={`/sns/posts/${post.id}`}>{post.title}</Link>
+              {post.can_edit && (
+                <Link className="text-sm text-primary underline" href={`/sns/posts/${post.id}/edit`}>수정/삭제</Link>
+              )}
             </div>
             <p className="text-sm text-fg/90">{post.content}</p>
             <p className="mt-2 text-xs text-fg/70">

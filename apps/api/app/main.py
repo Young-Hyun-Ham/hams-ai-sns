@@ -27,7 +27,7 @@ from app.schemas import (
 from app.security import decode_access_token
 from app.services import auth_service, bot_service, sns_service
 
-app = FastAPI(title="hams-api", version="0.5.0")
+app = FastAPI(title="hams-api", version="0.7.0")
 
 
 def _parse_cors_origins() -> list[str]:
@@ -153,7 +153,9 @@ def get_sns_posts(
     current_user: dict = Depends(get_current_user),
     conn: psycopg.Connection = Depends(get_db),
 ) -> list[SnsPostResponse]:
-    rows = sns_service.list_posts(conn, current_user["id"])
+    rows = sns_service.list_public_posts(conn)
+    for row in rows:
+        row["can_edit"] = row["user_id"] == current_user["id"]
     return [SnsPostResponse(**row) for row in rows]
 
 
@@ -163,9 +165,10 @@ def get_sns_post(
     current_user: dict = Depends(get_current_user),
     conn: psycopg.Connection = Depends(get_db),
 ) -> SnsPostResponse:
-    row = sns_service.get_post(conn, post_id, current_user["id"])
+    row = sns_service.get_post_by_id(conn, post_id)
     if not row:
         raise HTTPException(status_code=404, detail="게시글을 찾을 수 없습니다.")
+    row["can_edit"] = row["user_id"] == current_user["id"]
     return SnsPostResponse(**row)
 
 
@@ -189,6 +192,7 @@ def create_sns_post(
 
     row["bot_name"] = None
     row["comment_count"] = 0
+    row["can_edit"] = True
     if row["bot_id"]:
         bot = bot_service.get_bot(conn, row["bot_id"], current_user["id"])
         row["bot_name"] = bot["name"] if bot else None
@@ -208,10 +212,11 @@ def patch_sns_post(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if not row:
-        raise HTTPException(status_code=404, detail="게시글을 찾을 수 없습니다.")
+        raise HTTPException(status_code=403, detail="본인이 작성한 게시글만 수정할 수 있습니다.")
 
     row["bot_name"] = None
-    row["comment_count"] = len(sns_service.list_comments(conn, post_id, current_user["id"]))
+    row["comment_count"] = len(sns_service.list_comments(conn, post_id))
+    row["can_edit"] = True
     if row["bot_id"]:
         bot = bot_service.get_bot(conn, row["bot_id"], current_user["id"])
         row["bot_name"] = bot["name"] if bot else None
@@ -226,7 +231,7 @@ def remove_sns_post(
 ) -> Response:
     deleted = sns_service.delete_post(conn, post_id, current_user["id"])
     if not deleted:
-        raise HTTPException(status_code=404, detail="게시글을 찾을 수 없습니다.")
+        raise HTTPException(status_code=403, detail="본인이 작성한 게시글만 삭제할 수 있습니다.")
     return Response(status_code=204)
 
 
@@ -236,9 +241,11 @@ def get_sns_comments(
     current_user: dict = Depends(get_current_user),
     conn: psycopg.Connection = Depends(get_db),
 ) -> list[SnsCommentResponse]:
-    if not sns_service.get_post(conn, post_id, current_user["id"]):
+    if not sns_service.get_post_by_id(conn, post_id):
         raise HTTPException(status_code=404, detail="게시글을 찾을 수 없습니다.")
-    rows = sns_service.list_comments(conn, post_id, current_user["id"])
+    rows = sns_service.list_comments(conn, post_id)
+    for row in rows:
+        row["can_edit"] = row["user_id"] == current_user["id"]
     return [SnsCommentResponse(**row) for row in rows]
 
 
@@ -253,6 +260,7 @@ def create_sns_comment(
         row = sns_service.create_comment(conn, post_id, current_user["id"], payload.content)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    row["can_edit"] = True
     return SnsCommentResponse(**row)
 
 
@@ -265,7 +273,8 @@ def patch_sns_comment(
 ) -> SnsCommentResponse:
     row = sns_service.update_comment(conn, comment_id, current_user["id"], payload.content)
     if not row:
-        raise HTTPException(status_code=404, detail="댓글을 찾을 수 없습니다.")
+        raise HTTPException(status_code=403, detail="본인이 작성한 댓글만 수정할 수 있습니다.")
+    row["can_edit"] = True
     return SnsCommentResponse(**row)
 
 
@@ -277,7 +286,7 @@ def remove_sns_comment(
 ) -> Response:
     deleted = sns_service.delete_comment(conn, comment_id, current_user["id"])
     if not deleted:
-        raise HTTPException(status_code=404, detail="댓글을 찾을 수 없습니다.")
+        raise HTTPException(status_code=403, detail="본인이 작성한 댓글만 삭제할 수 있습니다.")
     return Response(status_code=204)
 
 
