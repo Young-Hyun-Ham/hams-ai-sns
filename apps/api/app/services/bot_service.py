@@ -32,8 +32,13 @@ def create_bot(conn: psycopg.Connection, user_id: int, name: str, persona: str, 
         bot = cur.fetchone()
 
         seed_jobs = [
-            (bot["id"], "post_text", json.dumps({"tone": "friendly"}), DEFAULT_JOB_INTERVAL_SECONDS),
-            (bot["id"], "follow_user", json.dumps({"target": "ai_founder"}), DEFAULT_JOB_INTERVAL_SECONDS),
+            (bot["id"], "ai_create_post", json.dumps({"tone": "friendly"}), DEFAULT_JOB_INTERVAL_SECONDS),
+            (
+                bot["id"],
+                "ai_create_comment",
+                json.dumps({"tone": "supportive", "fallback": "좋은 인사이트 감사합니다!"}),
+                DEFAULT_JOB_INTERVAL_SECONDS,
+            ),
         ]
         cur.executemany(
             """
