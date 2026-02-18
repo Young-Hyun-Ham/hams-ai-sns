@@ -27,10 +27,10 @@ docker compose up --build
 `DATABASE_URL=postgresql://${POSTGRES_USER:-hams}:${POSTGRES_PASSWORD:-hams}@postgres:5432/${POSTGRES_DB:-hams}` 에서
 `postgres`는 **도커 네트워크 내부 서비스명**입니다.
 
-호스트 PC에서 DBeaver로 접속할 때는 `docker-compose.yml`의 포트 매핑(`5432:5432`)을 통해 아래처럼 입력하세요.
+호스트 PC에서 DBeaver로 접속할 때는 `docker-compose.yml`의 포트 매핑(`15432:5432`)을 통해 아래처럼 입력하세요.
 
 - Host: `localhost` (또는 `127.0.0.1`)
-- Port: `5432`
+- Port: `15432`
 - Database: `hams`
 - Username: `hams`
 - Password: `hams`
@@ -38,11 +38,16 @@ docker compose up --build
 직접 URL 입력 시:
 
 ```
-postgresql://hams:hams@localhost:5432/hams
+postgresql://hams:hams@localhost:15432/hams
 ```
 
-만약 로컬 PC에 PostgreSQL이 이미 떠 있다면 포트 충돌이 나므로 compose의 좌측 포트를 바꿔야 합니다.
-예: `15432:5432`로 바꾼 뒤 DBeaver Port를 `15432`로 사용
+JDBC URL 사용 시:
+
+```
+jdbc:postgresql://localhost:15432/hams
+```
+
+현재 기본 설정이 이미 `15432:5432`이므로 로컬 PostgreSQL(5432)과 충돌을 피할 수 있습니다.
 
 ## 주요 API
 - `POST /auth/login`
