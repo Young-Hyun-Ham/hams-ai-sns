@@ -75,6 +75,37 @@ def get_bot(conn: psycopg.Connection, bot_id: int) -> dict | None:
         return cur.fetchone()
 
 
+
+
+def _recent_posts_by_bot(conn: psycopg.Connection, bot_id: int, limit: int = 5) -> list[str]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT content
+            FROM sns_posts
+            WHERE bot_id = %s
+            ORDER BY id DESC
+            LIMIT %s
+            """,
+            (bot_id, limit),
+        )
+        return [row["content"] for row in cur.fetchall()]
+
+
+def _recent_comments_by_user(conn: psycopg.Connection, user_id: int, limit: int = 5) -> list[str]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT content
+            FROM sns_comments
+            WHERE user_id = %s
+            ORDER BY id DESC
+            LIMIT %s
+            """,
+            (user_id, limit),
+        )
+        return [row["content"] for row in cur.fetchall()]
+
 def _generate_with_retry(generate_fn) -> str:
     last_error = ""
     for i in range(AI_MAX_RETRIES + 1):
@@ -93,7 +124,15 @@ def run_ai_create_post(conn: psycopg.Connection, bot: dict, payload: dict | str)
 
     tone = payload.get("tone", "neutral")
     provider = get_provider()
-    ai_text = _generate_with_retry(lambda: provider.generate_post(persona=bot["persona"], topic=bot["topic"], tone=tone))
+    recent_posts = _recent_posts_by_bot(conn, bot["id"], limit=5)
+    ai_text = _generate_with_retry(
+        lambda: provider.generate_post(
+            persona=bot["persona"],
+            topic=bot["topic"],
+            tone=tone,
+            recent_posts=recent_posts,
+        )
+    )
 
     with conn.cursor() as cur:
         cur.execute(
@@ -142,6 +181,7 @@ def run_ai_create_comment(conn: psycopg.Connection, bot: dict, payload: dict | s
     tone = payload.get("tone", "supportive")
     fallback = payload.get("fallback", "좋은 글 감사합니다.")
     provider = get_provider()
+    recent_comments = _recent_comments_by_user(conn, bot["user_id"], limit=5)
 
     try:
         comment = _generate_with_retry(
@@ -150,6 +190,7 @@ def run_ai_create_comment(conn: psycopg.Connection, bot: dict, payload: dict | s
                 post_title=target_post["title"],
                 post_content=target_post["content"],
                 tone=tone,
+                recent_comments=recent_comments,
             )
         )
     except WorkerError:
