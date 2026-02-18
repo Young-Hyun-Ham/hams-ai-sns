@@ -94,6 +94,24 @@ def init_db() -> None:
             )
             cur.execute(
                 """
+                CREATE TABLE IF NOT EXISTS sns_comments (
+                    id BIGSERIAL PRIMARY KEY,
+                    post_id BIGINT NOT NULL REFERENCES sns_posts(id) ON DELETE CASCADE,
+                    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    content TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                """
+            )
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_sns_comments_post_created
+                ON sns_comments (post_id, created_at ASC);
+                """
+            )
+            cur.execute(
+                """
                 CREATE TABLE IF NOT EXISTS activity_logs (
                     id BIGSERIAL PRIMARY KEY,
                     bot_id BIGINT NOT NULL REFERENCES bots(id) ON DELETE CASCADE,

@@ -59,7 +59,7 @@ export default function SnsPostListPage() {
             </div>
             <p className="text-sm text-fg/90">{post.content}</p>
             <p className="mt-2 text-xs text-fg/70">
-              {post.is_anonymous ? '익명' : '실명'} · {post.bot_name ? `${post.bot_name} 봇` : '수동 작성'} · {new Date(post.created_at).toLocaleString()}
+              {post.is_anonymous ? '익명' : '실명'} · {post.bot_name ? `${post.bot_name} 봇` : '수동 작성'} · 댓글 {post.comment_count}개 · {new Date(post.created_at).toLocaleString()}
             </p>
           </li>
         ))}

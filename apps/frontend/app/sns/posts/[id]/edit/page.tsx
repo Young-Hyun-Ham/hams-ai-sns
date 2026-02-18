@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import { Bot, SnsPost, apiClient, authHeader } from '../../../../../lib/api';
+import { Bot, SnsComment, SnsPost, apiClient, authHeader } from '../../../../../lib/api';
 import { useAppStore } from '../../../../../stores/app-store';
 
 export default function SnsPostEditPage() {
@@ -18,11 +18,25 @@ export default function SnsPostEditPage() {
   const [isAnonymous, setIsAnonymous] = useState(true);
   const [botId, setBotId] = useState<string>('');
   const [bots, setBots] = useState<Bot[]>([]);
+  const [comments, setComments] = useState<SnsComment[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
     hydrate();
   }, [hydrate]);
+
+  const loadComments = async () => {
+    if (!token || !params.id) return;
+    try {
+      const res = await apiClient.get<SnsComment[]>(`/sns/posts/${params.id}/comments`, { headers: authHeader(token) });
+      setComments(res.data);
+    } catch {
+      setComments([]);
+    }
+  };
 
   useEffect(() => {
     if (!token || !params.id) return;
@@ -36,6 +50,7 @@ export default function SnsPostEditPage() {
     }).catch(() => setError('게시글 조회에 실패했습니다.'));
 
     apiClient.get<Bot[]>('/bots', headers).then((res) => setBots(res.data)).catch(() => setBots([]));
+    loadComments();
   }, [params.id, token]);
 
   const update = async () => {
@@ -70,6 +85,55 @@ export default function SnsPostEditPage() {
     }
   };
 
+  const addComment = async () => {
+    if (!token || !newComment.trim()) return;
+
+    try {
+      await apiClient.post(
+        `/sns/posts/${params.id}/comments`,
+        { content: newComment.trim() },
+        { headers: authHeader(token) }
+      );
+      setNewComment('');
+      loadComments();
+    } catch {
+      setError('댓글 등록에 실패했습니다.');
+    }
+  };
+
+  const startEditComment = (comment: SnsComment) => {
+    setEditingCommentId(comment.id);
+    setEditingCommentText(comment.content);
+  };
+
+  const saveComment = async () => {
+    if (!token || !editingCommentId || !editingCommentText.trim()) return;
+
+    try {
+      await apiClient.patch(
+        `/sns/comments/${editingCommentId}`,
+        { content: editingCommentText.trim() },
+        { headers: authHeader(token) }
+      );
+      setEditingCommentId(null);
+      setEditingCommentText('');
+      loadComments();
+    } catch {
+      setError('댓글 수정에 실패했습니다.');
+    }
+  };
+
+  const removeComment = async (commentId: number) => {
+    if (!token) return;
+
+    try {
+      await apiClient.delete(`/sns/comments/${commentId}`, { headers: authHeader(token) });
+      loadComments();
+    } catch {
+      setError('댓글 삭제에 실패했습니다.');
+    }
+  };
+
   return (
     <main className="mx-auto min-h-[100dvh] max-w-2xl bg-bg px-4 pb-[calc(env(safe-area-inset-bottom)+24px)] pt-[calc(env(safe-area-inset-top)+24px)]">
       <header className="mb-4 flex items-center justify-between">
@@ -97,6 +161,51 @@ export default function SnsPostEditPage() {
             <button className="rounded-lg border border-red-400 px-3 py-2 text-red-500" onClick={remove}>삭제</button>
           </div>
         </div>
+      </section>
+
+      <section className="mt-4 rounded-xl border border-border bg-card p-4">
+        <h2 className="mb-3 font-medium">댓글</h2>
+
+        <div className="mb-3 flex gap-2">
+          <input
+            className="flex-1 rounded-lg border border-border bg-transparent p-2"
+            placeholder="댓글을 입력하세요"
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+          />
+          <button className="rounded-lg bg-primary px-3 py-2 text-white" onClick={addComment}>등록</button>
+        </div>
+
+        <ul className="space-y-2">
+          {comments.map((comment) => (
+            <li key={comment.id} className="rounded-lg border border-border p-3">
+              {editingCommentId === comment.id ? (
+                <div className="space-y-2">
+                  <textarea
+                    className="w-full rounded-lg border border-border bg-transparent p-2"
+                    value={editingCommentText}
+                    onChange={(e) => setEditingCommentText(e.target.value)}
+                  />
+                  <div className="flex gap-2">
+                    <button className="rounded border border-border px-2 py-1" onClick={saveComment}>저장</button>
+                    <button className="rounded border border-border px-2 py-1" onClick={() => setEditingCommentId(null)}>취소</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm">{comment.content}</p>
+                    <p className="text-xs text-fg/70">{new Date(comment.created_at).toLocaleString()}</p>
+                  </div>
+                  <div className="flex gap-2 text-xs">
+                    <button className="rounded border border-border px-2 py-1" onClick={() => startEditComment(comment)}>수정</button>
+                    <button className="rounded border border-red-300 px-2 py-1 text-red-500" onClick={() => removeComment(comment.id)}>삭제</button>
+                  </div>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
       </section>
     </main>
   );

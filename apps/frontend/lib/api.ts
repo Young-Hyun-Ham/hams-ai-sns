@@ -25,6 +25,17 @@ export type SnsPost = {
   is_anonymous: boolean;
   created_at: string;
   updated_at: string;
+  comment_count: number;
 };
 
 export const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` });
+
+
+export type SnsComment = {
+  id: number;
+  post_id: number;
+  user_id: number;
+  content: string;
+  created_at: string;
+  updated_at: string;
+};

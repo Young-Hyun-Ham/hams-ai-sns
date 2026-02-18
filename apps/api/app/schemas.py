@@ -88,3 +88,21 @@ class SnsPostResponse(BaseModel):
     is_anonymous: bool
     created_at: datetime
     updated_at: datetime
+    comment_count: int
+
+
+class SnsCommentCreateRequest(BaseModel):
+    content: str = Field(..., min_length=1)
+
+
+class SnsCommentUpdateRequest(BaseModel):
+    content: str = Field(..., min_length=1)
+
+
+class SnsCommentResponse(BaseModel):
+    id: int
+    post_id: int
+    user_id: int
+    content: str
+    created_at: datetime
+    updated_at: datetime

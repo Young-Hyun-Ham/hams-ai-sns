@@ -17,6 +17,9 @@ from app.schemas import (
     LoginRequest,
     LoginResponse,
     MeResponse,
+    SnsCommentCreateRequest,
+    SnsCommentResponse,
+    SnsCommentUpdateRequest,
     SnsPostCreateRequest,
     SnsPostResponse,
     SnsPostUpdateRequest,
@@ -185,6 +188,7 @@ def create_sns_post(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     row["bot_name"] = None
+    row["comment_count"] = 0
     if row["bot_id"]:
         bot = bot_service.get_bot(conn, row["bot_id"], current_user["id"])
         row["bot_name"] = bot["name"] if bot else None
@@ -207,6 +211,7 @@ def patch_sns_post(
         raise HTTPException(status_code=404, detail="게시글을 찾을 수 없습니다.")
 
     row["bot_name"] = None
+    row["comment_count"] = len(sns_service.list_comments(conn, post_id, current_user["id"]))
     if row["bot_id"]:
         bot = bot_service.get_bot(conn, row["bot_id"], current_user["id"])
         row["bot_name"] = bot["name"] if bot else None
@@ -222,6 +227,57 @@ def remove_sns_post(
     deleted = sns_service.delete_post(conn, post_id, current_user["id"])
     if not deleted:
         raise HTTPException(status_code=404, detail="게시글을 찾을 수 없습니다.")
+    return Response(status_code=204)
+
+
+@app.get("/sns/posts/{post_id}/comments", response_model=list[SnsCommentResponse])
+def get_sns_comments(
+    post_id: int,
+    current_user: dict = Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_db),
+) -> list[SnsCommentResponse]:
+    if not sns_service.get_post(conn, post_id, current_user["id"]):
+        raise HTTPException(status_code=404, detail="게시글을 찾을 수 없습니다.")
+    rows = sns_service.list_comments(conn, post_id, current_user["id"])
+    return [SnsCommentResponse(**row) for row in rows]
+
+
+@app.post("/sns/posts/{post_id}/comments", response_model=SnsCommentResponse, status_code=201)
+def create_sns_comment(
+    post_id: int,
+    payload: SnsCommentCreateRequest,
+    current_user: dict = Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_db),
+) -> SnsCommentResponse:
+    try:
+        row = sns_service.create_comment(conn, post_id, current_user["id"], payload.content)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return SnsCommentResponse(**row)
+
+
+@app.patch("/sns/comments/{comment_id}", response_model=SnsCommentResponse)
+def patch_sns_comment(
+    comment_id: int,
+    payload: SnsCommentUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_db),
+) -> SnsCommentResponse:
+    row = sns_service.update_comment(conn, comment_id, current_user["id"], payload.content)
+    if not row:
+        raise HTTPException(status_code=404, detail="댓글을 찾을 수 없습니다.")
+    return SnsCommentResponse(**row)
+
+
+@app.delete("/sns/comments/{comment_id}", status_code=204)
+def remove_sns_comment(
+    comment_id: int,
+    current_user: dict = Depends(get_current_user),
+    conn: psycopg.Connection = Depends(get_db),
+) -> Response:
+    deleted = sns_service.delete_comment(conn, comment_id, current_user["id"])
+    if not deleted:
+        raise HTTPException(status_code=404, detail="댓글을 찾을 수 없습니다.")
     return Response(status_code=204)
 
 
